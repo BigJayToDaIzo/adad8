@@ -6,6 +6,36 @@ Notation: * accomplishment | ? open question | + resolved | ~ dropped
 
 ---
 
+# 2025-03-02 (cont. 2 — test harness + decoder)
+
+Built out the test infrastructure and started instruction decoding.
+
+## What Was Built
+
+* Cpu.cs — 8-bit register properties (AH/AL/BH/BL/CH/CL/DH/DL) as computed views into 16-bit parents. Flag bool properties (CF/PF/AF/ZF/SF/OF/TF/IF/DF) as computed views into ushort Flags.
+* Memory.cs — separate memory class with ReadByte/WriteByte, 1MB backing array, address wrapping at 0xFFFFF.
+* TestHarness.cs — Setup loads initial CPU state (registers, flags, RAM, queue) from test case. Verify asserts final state using null-coalescing (changed value from Final, unchanged from Initial).
+* Opcode00Tests.cs — first red integration test: loads 10,000 tests, setup/execute/verify loop. Fails because Execute() is a no-op.
+* DecoderTests.cs — unit tests for instruction byte decoding.
+* Decoder.cs — static Decode method, extracts operation (top 6 bits), D bit, W bit from first byte. Switch expression maps opcode to Operation enum.
+* DecodedInstruction.cs — positional record holding Operation, Direction, Word.
+* Operation.cs — enum with Add, Sub so far.
+* .gitignore — added, removed bin/obj/test data from tracking.
+
+## Key Decisions
+
++ Decode-then-execute architecture: decoder produces a DecodedInstruction, Execute acts on it. Clean separation, testable independently.
++ DecodedInstruction is a positional record (immutable).
++ Decoder is a static class with a static Decode method.
+
+## In Progress
+
+? Decoder.Decode signature needs to accept variable-length byte input (byte array or span) for ModR/M + displacement + immediate bytes.
+? DecodedInstruction needs Mod, Reg, Rm fields for ModR/M byte decoding.
+? How to represent operands in DecodedInstruction — register vs memory vs immediate.
+
+---
+
 # 2025-03-02 (cont. 1 — design decisions)
 
 Resolved all open questions from project inception through discussion.
