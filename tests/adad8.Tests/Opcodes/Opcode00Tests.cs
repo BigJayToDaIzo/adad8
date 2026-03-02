@@ -1,15 +1,20 @@
-using adad8.Tests;
-
-public class Opcode00Tests
+namespace adad8.Tests.Opcodes
 {
-  [Fact]
-  public void Execute()
+  public class Opcode00Tests
   {
-    var TestList = TestLoader.Load("00");
-
-    foreach (TestCase test in TestList)
+    [Fact]
+    public void ExecuteInstructionSetSuccessfully()
     {
-      var cpu = TestHarness.Setup(test);
+      var TestList = TestLoader.Load("00");
+
+      foreach (TestCase test in TestList)
+      {
+        var cpu_init = TestHarness.Setup(test);
+        // run it through instructions
+        cpu_init.Execute();
+        // pass the init and final cpu into verify
+        TestHarness.Verify(cpu_init, test);
+      }
     }
   }
 }

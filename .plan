@@ -6,6 +6,19 @@ Notation: * accomplishment | ? open question | + resolved | ~ dropped
 
 ---
 
+# 2025-03-02 (cont. 1 — design decisions)
+
+Resolved all open questions from project inception through discussion.
+
+## Design Decisions
+
++ Register overlap modeling — 16-bit registers (AX, BX, CX, DX) are source of truth. 8-bit halves (AH/AL, BH/BL, CH/CL, DH/DL) are computed properties via mask/shift. Rationale: addressing modes only use 16-bit registers; 8-bit operands pay a trivial bitwise cost.
++ Flags representation — 16-bit FLAGS register is source of truth. Individual flag bools (CF, PF, AF, ZF, SF, OF, TF, IF, DF) are computed properties. Matches test suite format (ushort) and keeps instruction logic readable. May pivot later as understanding deepens.
++ Memory model — separate class with ReadByte/WriteByte methods, not a raw array on Cpu. Bus cycle tracking will eventually add behavior to memory access; having the seam in place now avoids a painful refactor later.
++ Accuracy target — instruction-level first (initial -> final state comparison), tighten to cycle-level later. Cycle-level requires modeling BIU/EU cooperation, prefetch queue timing, and T-state sequencing — defer until opcodes are passing.
+
+---
+
 # 2025-03-01 (cont. 0 — project inception)
 
 Established project scope and reference material. No code yet.
@@ -24,10 +37,10 @@ Established project scope and reference material. No code yet.
   - Half of tests execute from prefetched queue; queue fetches beyond initial contents return NOP (0x90).
 * First tests will target the CPU state object — it's the foundational data structure the test suite provides and validates.
 
-? Register overlap modeling (AX = AH:AL etc.) — needs spec reading before deciding.
-? Flags representation — individual flags vs raw 16-bit value vs both.
-? Memory model — part of CPU state or separate collaborator.
-? .NET version and project structure not yet decided.
-? Cycle-level accuracy vs instruction-level accuracy as initial target.
++ Register overlap modeling — resolved cont. 1: 16-bit source of truth, computed 8-bit properties.
++ Flags representation — resolved cont. 1: 16-bit source of truth, computed bool properties.
++ Memory model — resolved cont. 1: separate class with methods.
++ .NET version and project structure — resolved: .NET 10, src/adad8 + tests/adad8.Tests, xUnit.
++ Cycle-level accuracy vs instruction-level accuracy — resolved cont. 1: instruction-level first, tighten later.
 
 ---
