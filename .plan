@@ -1,0 +1,33 @@
+# adad8 — Intel 8088 Emulator in C#
+
+Carmack-style work log. Newest entries first. See CLAUDE.md for project rules.
+
+Notation: * accomplishment | ? open question | + resolved | ~ dropped
+
+---
+
+# 2025-03-01 (cont. 0 — project inception)
+
+Established project scope and reference material. No code yet.
+
+## What Was Built
+
+* CLAUDE.md — project-level instructions combining base dev standards with 8088 emulator context.
+* docs/Intel_8086_Family_Users_Manual.pdf — downloaded the October 1979 Intel MCS-86 Family User's Manual (the primary reference for this project).
+* .plan and memory directory structure initialized.
+
+## Key Design Choices
+
+* Validation target: SingleStepTests/8088 hardware-generated test suite (https://github.com/SingleStepTests/8088).
+  - JSON v2 format: 10,000 tests per opcode, each with initial CPU state, final (changed-only) state, and per-cycle bus activity.
+  - Test environment: 1MB writable RAM, no wait states, address wraps at 0xFFFFF.
+  - Half of tests execute from prefetched queue; queue fetches beyond initial contents return NOP (0x90).
+* First tests will target the CPU state object — it's the foundational data structure the test suite provides and validates.
+
+? Register overlap modeling (AX = AH:AL etc.) — needs spec reading before deciding.
+? Flags representation — individual flags vs raw 16-bit value vs both.
+? Memory model — part of CPU state or separate collaborator.
+? .NET version and project structure not yet decided.
+? Cycle-level accuracy vs instruction-level accuracy as initial target.
+
+---
