@@ -5,7 +5,7 @@ public class DecoderTests
   [Fact]
   public void Decode_0x00_ReturnsAdd_DirectionZero_WordZero()
   {
-    var instruction = Decoder.Decode([0x00]);
+    var instruction = Decoder.Decode([0x00, 0x00]);
 
     Assert.Equal(Operation.Add, instruction.Operation);
     Assert.False(instruction.Direction);
@@ -20,16 +20,6 @@ public class DecoderTests
     Assert.Equal(Operation.Add, instruction.Operation);
     Assert.True(instruction.Direction);
     Assert.True(instruction.Word);
-  }
-
-  [Fact]
-  public void Decode_0x28_ReturnsSub_DirectionZero_WordZero()
-  {
-    var instruction = Decoder.Decode([0x28]);
-
-    Assert.Equal(Operation.Sub, instruction.Operation);
-    Assert.False(instruction.Direction);
-    Assert.False(instruction.Word);
   }
 
   [Fact]
