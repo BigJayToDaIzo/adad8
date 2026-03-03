@@ -6,6 +6,66 @@ Notation: * accomplishment | ? open question | + resolved | ~ dropped
 
 ---
 
+# 2026-03-02 (cont. 4 — decoder refactor + Register enum)
+
+Refactored decoder tests and designed the Register enum.
+
+## What Was Built
+
+* DecoderTests.cs — refactored all 3 tests to pass byte[] instead of single byte. Killed premature 2-arg ModR/M test. Added new red test: Decode([0x00, 0xC8]) asserting resolved operands (Operation=Add, Destination=Register.AL, Source=Register.CL).
+* Register.cs — enum with all 16 registers. Order is intentional: AL(0)–BH(7) then AX(8)–DI(15). Mirrors Intel's REG encoding table exactly — the 3-bit REG/R/M index maps directly to the enum value, with W bit as an offset of 8. Resolution is just `regIndex + (word ? 8 : 0)`, no switch needed.
+* Decoder.Decode signature changed from `byte` to `byte[]`.
+* Opcode00Tests skipped via `[Fact(Skip=...)]` to focus on decoder unit tests.
+* Re-downloaded 00.json.gz test data (was lost between machines).
+
+## Key Decisions
+
++ Register enum ordering matches Intel REG table — enum value IS the lookup index. W=0 uses values 0–7 (8-bit), W=1 uses values 8–15 (16-bit). Eliminates need for a switch/dictionary to resolve register names.
++ DecodedInstruction will carry resolved Source and Destination (Register type) not raw MOD/REG/R/M fields. Execute should not re-interpret encoding tables.
++ Decoder accepts byte[] and consumes what it needs. No fixed-arity overloads.
+
+## Resolved
+
++ Operand representation — Register enum for register operands. Memory and immediate representations still TBD.
++ Decoder input format — byte[] matching the test suite's int[] (cast on entry).
+
+## In Progress
+
+? DecodedInstruction needs Source and Destination properties of type Register.
+? Decoder.Decode needs to parse byte 2 (ModR/M) for the MOD=11 case — shift/mask to extract REG and R/M, resolve via enum offset.
+? Memory and immediate operand representation still unresolved — will surface when tests demand it.
+
+---
+
+# 2026-03-02 (cont. 3 — instruction encoding deep dive)
+
+Deep read of Intel manual Chapter 4 (pages 4-18 through 4-35) — machine instruction encoding and decoding. No code written, all conceptual.
+
+## Key Understanding Gained
+
+* 8088 instructions are 1–6 bytes, variable length. The opcode byte determines the grammar of what follows — not all instructions have a ModR/M byte.
+* Byte 1 layout: top 6 bits = operation, bit 1 = D (direction), bit 0 = W (word/byte). The opcode determines the encoding form; D and W are modifiers within that form.
+* Byte 2 (ModR/M) layout when present: MOD (2 bits) + REG (3 bits) + R/M (3 bits). All three fields are intermediate decoding state — they resolve to concrete operands and are then disposable.
+* MOD determines memory vs register mode and displacement byte count. REG is a register index (or opcode extension in the 0x80–0x83 group). R/M is register (when MOD=11) or EA formula (otherwise).
+* ADD has three encoding families: reg↔reg/mem (0x00–0x03, ModR/M), immediate→accumulator (0x04–0x05, no ModR/M), immediate→reg/mem (0x80–0x83, REG field = opcode extension).
+* Special case: MOD=00 + R/M=110 = direct address (16-bit displacement, not BP).
+* No memory↔memory instructions — always at least one register operand.
+* Field extraction is shift-then-mask: shift target bits to LSB, AND with mask of desired width (& 1 for 1 bit, & 0x7 for 3 bits).
+
+## Resolved
+
++ MOD/REG/R/M are not worth abstracting as separate layers — they're transient decoding state that resolves to operands.
++ The two-byte Decode(0x00, 0xC8) test written by prior agent was premature — it assumed byte 2 is always ModR/M, which isn't true (0x04 has raw data as byte 2).
+~ Dropped the two-arg Decode overload approach. Fixed-arity doesn't match variable-length reality.
+
+## Open Questions
+
+? How should the decoder consume bytes — stream/span that it reads from, or something else? The opcode byte determines how many more bytes to consume, but you don't know upfront.
+? What shape does the decoded result take — resolved operands (source=CL, dest=AL) vs raw fields? Leaning toward resolved operands since Execute shouldn't re-interpret encoding tables.
+? How to handle the 0x80–0x83 family where REG is an opcode extension, not a register.
+
+---
+
 # 2025-03-02 (cont. 2 — test harness + decoder)
 
 Built out the test infrastructure and started instruction decoding.

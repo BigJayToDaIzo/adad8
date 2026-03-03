@@ -2,11 +2,11 @@ namespace adad8
 {
   public static class Decoder
   {
-    public static DecodedInstruction Decode(byte instruction)
+    public static DecodedInstruction Decode(byte[] instructions)
     {
-      var opcode = instruction >> 2;
-      var direction = ((instruction >> 1) & 1) == 1;
-      var word = (instruction & 1) == 1;
+      var opcode = instructions[0] >> 2;
+      var direction = ((instructions[0] >> 1) & 1) == 1;
+      var word = (instructions[0] & 1) == 1;
 
       var operation = opcode switch
       {
@@ -15,7 +15,12 @@ namespace adad8
         _ => throw new Exception("Invalid Opcode"),
       };
 
-      return new DecodedInstruction { Operation = operation, Direction = direction, Word = word };
+      return new DecodedInstruction
+      {
+        Operation = operation,
+        Direction = direction,
+        Word = word,
+      };
     }
   }
 }

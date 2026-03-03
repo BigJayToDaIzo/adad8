@@ -1,0 +1,5 @@
+public enum Register
+{
+  AL, CL, DL, BL, AH, CH, DH, BH,
+  AX, CX, DX, BX, SP, BP, SI, DI,
+}

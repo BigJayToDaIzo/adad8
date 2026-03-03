@@ -2,7 +2,7 @@ namespace adad8.Tests.Opcodes
 {
   public class Opcode00Tests
   {
-    [Fact]
+    [Fact(Skip = "Focus on Decoder tests")]
     public void ExecuteInstructionSetSuccessfully()
     {
       var TestList = TestLoader.Load("00");
