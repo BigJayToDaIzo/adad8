@@ -61,6 +61,8 @@ public record TestState
 
 public record TestCase
 {
+  public override string ToString() => Name;
+
   [JsonPropertyName("name")]
   public string Name { get; init; } = string.Empty;
 
