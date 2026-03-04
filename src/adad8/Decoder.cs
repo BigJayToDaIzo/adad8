@@ -2,67 +2,56 @@ namespace adad8
 {
   public static class Decoder
   {
-    static readonly bool[] _byteOneLookAhead = new bool[256];
+    static readonly bool[] _hasModRM = new bool[256];
+
     static Decoder()
     {
-      _byteOneLookAhead[0x00] = true;
+      _hasModRM[0x00] = true;
     }
+
     public static DecodedInstruction Decode(byte[] instructions)
     {
       var opcode = instructions[0] >> 2;
-      var Direction = ((instructions[0] >> 1) & 1) == 1;
-      var Word = (instructions[0] & 1) == 1;
-      var HasModRM = _byteOneLookAhead[instructions[0]];
+      var direction = ((instructions[0] >> 1) & 1) == 1;
+      var word = (instructions[0] & 1) == 1;
+      var hasModRM = _hasModRM[instructions[0]];
 
-      var Op = opcode switch
+      var operation = opcode switch
       {
         0 => Operation.Add,
         _ => throw new Exception("Invalid Opcode"),
       };
 
-      Register? Source = null;
-      Register? Destination = null;
+      Register? reg;
+      Register? rm;
+      Register? source = null;
+      Register? destination = null;
 
-      if (HasModRM)
+      if (hasModRM)
       {
-        (Source, Destination) = parseModRMByte(instructions[1], Word, Direction);
-
+        (reg, rm) = ParseModRMByte(instructions[1], word);
+        // gotta do dir swap in this bih right hurr now since we pulled the d out
+        // directionHandleYo
+        source = !direction ? reg : rm;
+        destination = direction ? reg : rm;
       }
+
       return new DecodedInstruction
       {
-        Operation = Op,
-        Direction = Direction,
-        Word = Word,
-        Source = Source,
-        Destination = Destination,
+        Operation = operation,
+        Direction = direction,
+        Word = word,
+        Source = source,
+        Destination = destination,
       };
     }
-    public static (Register? Source, Register? Destination) parseModRMByte(byte instruction, bool word, bool direction)
+
+    public static (Register? reg, Register? rm) ParseModRMByte(byte instruction, bool word)
     {
-      var mod = instruction >> 6;
       var reg = (instruction >> 3) & 0b111;
       var rm = instruction & 0b111;
-      var Offset = word ? 8 : 0; // may be necessary if additonal instruction bytes follow
-      Register? Source = null;
-      Register? Destination = null;
-      // if (mod == 0b00) {}
-      // elseif (mod == 0b01) { // 8 bit displacement }
-      // elseif (mod == 0b01) { // 16 bit displacement }
-      if (mod == 0b11)
-      {
-        // no mem access, both are registers
-        if (direction)
-        {
-          Source = (Register)(rm + Offset);
-          Destination = (Register)(reg + Offset);
-        }
-        else
-        {
-          Source = (Register)(reg + Offset);
-          Destination = (Register)(rm + Offset);
-        }
-      }
-      return (Source, Destination);
+      var offset = word ? 8 : 0; // may be necessary if additonal instruction bytes follow
+      return ((Register)(reg + offset), (Register)(rm + offset));
     }
   }
 }

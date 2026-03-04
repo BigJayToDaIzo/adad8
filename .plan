@@ -6,6 +6,55 @@ Notation: * accomplishment | ? open question | + resolved | ~ dropped
 
 ---
 
+# 2026-03-03 (cont. 6 — decoder refactor: separation of concerns)
+
+Refactored Decoder.cs to clean up responsibility boundaries, naming, and conventions.
+
+## What Was Built
+
+* Decoder.cs — pulled direction (D bit) logic out of `ParseModRMByte`. Method now returns `(reg, rm)` tuple; `Decode` assigns source/destination via ternary based on D bit. Eliminated duplicated if/else swap block.
+* Decoder.cs — `ParseModRMByte` collapsed to 3 lines: extract, offset, return. No intermediate nullable variables.
+* Decoder.cs — renamed `_byteOneLookAhead` → `_hasModRM`. Says what it means.
+* Decoder.cs — all local variables fixed to camelCase (`direction`, `word`, `operation`, `source`, `destination`, `offset`).
+* Decoder.cs — `parseModRMByte` → `ParseModRMByte` (PascalCase method).
+* Opcode00Tests.cs — unskipped integration test, added test name to failure messages (prior session, captured here).
+* TestModel.cs — added `ToString() => Name` on TestCase (prior session, captured here).
+* docs/refactor-todo.md — created refactor tracking doc.
+
+## Key Decisions
+
++ Direction swap belongs in `Decode`, not `ParseModRMByte`. The ModR/M byte resolves operands (reg, rm); the D bit decides which is source vs destination. Clean separation of concerns.
++ `ParseModRMByte` returns structurally named tuple `(reg, rm)` not semantically named `(Source, Destination)` — it doesn't know about roles, only about fields.
++ Ternary pair `source = !direction ? reg : rm` / `destination = direction ? reg : rm` — flips operand assignment, not operand order. No duplication.
+
+## Resolved
+
++ Direction responsibility — lives in `Decode`, not in ModR/M parsing.
++ Naming conventions — all locals camelCase, methods PascalCase, private static field `_hasModRM` descriptive.
++ Prior session commits (4a37f06, e3ce9e4) now documented in .plan.
+
+## Open
+
+? `Decode_0x03` test passes `[0x03]` (1 byte) but 0x03 needs a ModR/M byte — will break when registered in `_hasModRM`.
+? `[Theory]`/`[MemberData]` for Opcode00Tests — monolithic 10k loop has no per-case discovery.
+? Memory and immediate operand representation on DecodedInstruction still TBD.
+
+---
+
+# 2026-03-02 (cont. 5 — ModR/M parsing green + integration test QoL)
+
+ModR/M byte parsing implemented for MOD=11 (register-to-register). Integration test unskipped with per-case error reporting.
+
+## What Was Built
+
+* Decoder.cs — static `_byteOneLookAhead[256]` lookup to flag opcodes needing ModR/M byte (only 0x00 registered). `parseModRMByte()` extracts MOD/REG/R/M fields, handles MOD=11 with direction-aware source/destination resolution using Register enum offset.
+* DecodedInstruction.cs — added nullable `Source` and `Destination` properties (`Register?`).
+* DecoderTests.cs — `Decode_0x00` test updated to pass `[0x00, 0x00]`. Sub test deleted (only ADD in switch).
+* Opcode00Tests.cs — unskipped, wrapped Verify in try/catch for `[{test.Name}] {ex.Message}` reporting.
+* TestModel.cs — `ToString() => Name` on TestCase.
+
+---
+
 # 2026-03-02 (cont. 4 — decoder refactor + Register enum)
 
 Refactored decoder tests and designed the Register enum.
