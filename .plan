@@ -6,6 +6,123 @@ Notation: * accomplishment | ? open question | + resolved | ~ dropped
 
 ---
 
+# 2026-03-05 (cont. 9 — documentation pass, scope narrowing)
+
+Session focused on documentation and prioritization. No code changes.
+
+## What Was Built
+
+* CLAUDE.md — new section: "8088 Internals — Auxiliary Carry Flag (AF) and the XOR Recovery Trick." Full derivation from full adder identity → XOR self-inverse → carry recovery → subtraction equivalence. Reference material for when SUB lands.
+* CLAUDE.md — new "Gotchas" section with two entries: single-byte decoder test inputs for multi-byte opcodes, and AF formula being ADD-only until SUB.
+
+## Key Decisions
+
++ AF XOR refactor deferred — verbose nibble-add stays until SUB demands the change. Documented in gotchas.
++ `[Theory]`/`[MemberData]` for Opcode00Tests dropped — harness with first-failure context is sufficient. May revisit late stage.
+~ `Decode_0x03` single-byte test — not a bug, valid test for opcode resolution layer. Documented as gotcha, delisted as open item.
+
+## Direction
+
+Directive: build out ADD to near-complete before moving to other opcodes. Next step is intermediate unit tests to fill gaps between current CpuTests and the full integration suite — CF boundary test (`0xFF + 0x01`), word-width flag variants, etc. Memory/immediate operand representation gates expanding beyond reg-to-reg but comes after unit test coverage is solid.
+
+## Open
+
+? CF test in isolation — `0xFF + 0x01`.
+? Word-width flag boundary tests — mirror the byte-width tests for 16-bit operands.
+? Memory and immediate operand representation on DecodedInstruction — still TBD, gates non-reg-to-reg ADD encodings.
+
+---
+
+# 2026-03-05 (cont. 8 — all six status flags green)
+
+Implemented all six status flags in `SetFlags` method. Full Execute pipeline working for byte reg-to-reg ADD.
+
+## What Was Built
+
+* Cpu.cs — `SetFlags(int result, ushort source, ushort destination, bool word)` computes all 6 status flags:
+  - CF: `result > 0xFF` (byte) / `result > 0xFFFF` (word)
+  - AF: `(source & 0x0F) + (destination & 0x0F) > 0x0F` (nibble carry, ADD-only for now)
+  - SF: `(result & 0x80) != 0` (byte) / `(result & 0x8000) != 0` (word)
+  - ZF: `result == 0`
+  - PF: `BitOperations.PopCount((uint)result & 0xFF) % 2 == 0` (low byte only, Intel legacy)
+  - OF: same-sign operands, opposite-sign result (three sign bit checks)
+* Cpu.cs — `Execute` stores result as `int` (wider than operands) to preserve carry info. Calls `SetFlags` before `SetRegisterValue` so original operand values are available for AF/OF.
+* CpuTests.cs — 7 tests total: GetRegisterValue, SetRegisterValue, plus 5 Execute tests each targeting a specific flag boundary (PF, AF, ZF, SF, OF).
+* TestHarness.cs — null-forgiving operator on all Initial register accesses, killing 28 CS8629 warnings.
+
+## Key Learnings
+
++ Flag test values are chosen at boundaries: `0x0F + 0x01` (nibble overflow), `0x7F + 0x01` (sign flip), `0x80 + 0x01` (stay negative), `0x00 + 0x00` (zero).
++ `int` result type is critical — truncating to `ushort` before flag checking loses carry info.
++ `SetFlags` must run before `SetRegisterValue` or destination reads get stale values.
++ Operator precedence: `&` binds looser than `+`. Always parenthesize masks: `(source & 0x0F) + (destination & 0x0F)`.
++ PF only checks low byte even on word ops — 8080 backward compatibility.
+
+## Open
+
+? AF formula is ADD-only. SUB needs borrow logic — XOR trick `(source ^ destination ^ result) & 0x10` handles both. Defer until SUB test demands it.
+? CF test in isolation not yet written (`0xFF + 0x01`).
+? Roslyn LSP code action keeps inlining `new Cpu()` on test variables — destructive, need to disable or suppress diagnostic.
+? `[Theory]`/`[MemberData]` for Opcode00Tests still pending.
+
+---
+
+# 2026-03-05 — AF (Auxiliary Carry Flag) learning notes
+
+AF is one of six status flags on the 8088 FLAGS register, set after arithmetic operations to reflect properties of the result. "F" = flag, not function.
+
+## Two approaches to computing AF
+
+**Verbose (understand first):**
+Mask low nibble of both operands (`& 0x0F`), add them, check if result > `0x0F`. If yes, a carry crossed the bit 3→4 boundary (the nibble boundary). Straightforward, only works for ADD.
+
+**Compact (refactor to later):**
+`(source ^ destination ^ result) & 0x10` — if bit 4 is set, AF is true. Works for both ADD and SUB without branching. Reason through *why* the XOR trick works once the verbose version is green and understood.
+
+TODO: write verbose AF first, get green, then reason about XOR equivalence and simplify.
+
+---
+
+# 2026-03-04 (cont. 7 — Execute pipeline: register dispatch + first ADD)
+
+Built the execution pipeline from decoded instruction to CPU state mutation. First end-to-end reg-to-reg ADD test is partially green (arithmetic correct, flags hacked).
+
+## What Was Built
+
+* Cpu.cs — `GetRegisterValue(Register)` returns ushort, switch expression over all 16 registers. `SetRegisterValue(Register, ushort)` switch statement, casts to byte for 8-bit register arms. Comments explain the enum-to-property translation purpose.
+* Cpu.cs — `Execute(DecodedInstruction)` method: reads source + destination via dispatch, adds, writes result back via dispatch. Flag setting is placeholder (`PF = !PF` hack).
+* CpuTests.cs — new file with 3 tests: GetRegisterValue, SetRegisterValue, Execute_AddAlCl_ByteRegisterToRegister. Execute test asserts on result (0x30) and all 6 status flags.
+* TestHarness.cs — added null-forgiving operator (`!`) to all 28 `.Value` accesses on Initial state registers. Kills CS8629 nullable warnings. Comment explains why: test suite guarantees Initial is fully populated.
+* ExecuteTests.cs — deleted, tests moved into CpuTests.cs.
+* Opcode00Tests.cs — re-skipped (Execute needs real implementation).
+* Read Intel manual Chapter 2 (PDF pp 28–65): flags register layout, processor architecture (EU/BIU split), segment registers, general registers, arithmetic instructions and flag behavior.
+
+## Key Decisions
+
++ Register dispatch via Get/SetRegisterValue switch — bridges the enum-to-property gap so Execute doesn't need per-instruction register selection logic.
++ Execute takes DecodedInstruction as parameter — no-arg stub replaced. Full pipeline: Decode → DecodedInstruction → Execute.
++ Flag computation deferred to after arithmetic is wired — TDD says get the value right first, then fix flags.
+
+## Continuation Point
+
+? Flag computation for ADD — need to implement all 6 status flags (CF, ZF, SF, OF, PF, AF).
+  - CF: do addition in wider type (int), check if result > 0xFF (byte) or > 0xFFFF (word). Intel manual PDF pp 60–61.
+  - ZF: result == 0
+  - SF: high-order bit of result
+  - OF: signed overflow — same-sign operands, opposite-sign result
+  - PF: even count of set bits in low byte of result
+  - AF: carry from bit 3 to bit 4 (low nibble overflow)
+  - Need source, destination, un-truncated result, and word flag to compute all six.
+  - Current hack: `PF = !PF` — must replace with real parity computation.
+
+## Open
+
+? Extract flag-setting into a method? — defer until second arithmetic op demands it.
+? `[Theory]`/`[MemberData]` for Opcode00Tests — still pending.
+? Memory and immediate operand representation on DecodedInstruction — still TBD.
+
+---
+
 # 2026-03-03 (cont. 6 — decoder refactor: separation of concerns)
 
 Refactored Decoder.cs to clean up responsibility boundaries, naming, and conventions.

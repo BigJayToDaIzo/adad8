@@ -77,3 +77,67 @@ Each test case is a JSON object with:
 - 4-byte prefetch instruction queue (vs 8086's 6-byte)
 - 20-bit address space (1MB) via segment:offset addressing
 - Registers: AX, BX, CX, DX, CS, SS, DS, ES, SP, BP, SI, DI, IP, FLAGS
+
+## 8088 Internals — Auxiliary Carry Flag (AF) and the XOR Recovery Trick
+
+AF is set when a carry (or borrow) crosses the bit 3→4 boundary — the nibble boundary. It exists for BCD adjustment instructions (DAA, DAS, AAA, AAS).
+
+### The verbose approach (ADD-only)
+
+Mask the low nibble of both operands, add them, check for overflow past 0x0F:
+
+```
+(source & 0x0F) + (destination & 0x0F) > 0x0F
+```
+
+Straightforward, but only models carry. Subtraction needs separate borrow logic.
+
+### The XOR trick (operation-agnostic)
+
+```
+AF = (source ^ destination ^ result) & 0x10
+```
+
+One formula, works for both ADD and SUB. Here's the derivation:
+
+**Step 1 — The full adder identity.** A full adder computes the sum bit at position `i` as:
+
+```
+result[i] = a[i] ⊕ b[i] ⊕ carry_in[i]
+```
+
+This is the definition of binary addition at a single bit. The sum is the three-way XOR of the two inputs and the incoming carry.
+
+**Step 2 — XOR is self-inverse.** Since `x ⊕ x = 0` and `x ⊕ 0 = x`, any one term can be recovered from the other three:
+
+```
+carry_in[i] = a[i] ⊕ b[i] ⊕ result[i]
+```
+
+**Step 3 — AF is carry_in at bit 4.** The carry entering bit 4 is the carry out of bit 3 — exactly the nibble boundary AF tracks. XOR all three full values and mask to isolate bit 4:
+
+```
+AF = (source ⊕ destination ⊕ result) & 0x10
+```
+
+**Step 4 — Subtraction has the same structure.** A full subtractor's difference bit is:
+
+```
+result[i] = a[i] ⊕ b[i] ⊕ borrow_in[i]
+```
+
+Same XOR relationship, borrow in place of carry. The recovery formula is identical.
+
+### Why this matters
+
+The verbose approach requires branching on the operation (add vs subtract vs compare vs ...). The XOR trick is a single expression that works for any arithmetic operation because it derives carry/borrow from the observable inputs and result, regardless of how the result was computed.
+
+## Gotchas
+
+### Decoder tests with single-byte input for multi-byte opcodes
+
+Some decoder unit tests (e.g. `Decode_0x03`) pass only the opcode byte to validate first-byte decoding (operation, D bit, W bit). This is a valid test — it proves the opcode resolution layer works in isolation. However, opcodes like 0x03 require a ModR/M byte. When that opcode gets registered in `_hasModRM`, the decoder will expect byte 2, and the test may need its input extended (e.g. `[0x03]` → `[0x03, 0xC8]`) depending on how the decoder handles missing bytes. Not a bug — just a test that will announce itself when the decoder grows.
+
+### AF formula is ADD-only until SUB lands
+
+`SetFlags` currently computes AF with the verbose nibble-add approach: `(source & 0x0F) + (destination & 0x0F) > 0x0F`. This only works for ADD. When SUB is implemented, replace with the operation-agnostic XOR trick: `(source ^ destination ^ result) & 0x10`. The derivation is documented above in the AF section. Leave as-is while building out ADD to completion.
