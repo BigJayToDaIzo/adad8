@@ -6,6 +6,31 @@ Notation: * accomplishment | ? open question | + resolved | ~ dropped
 
 ---
 
+# 2026-03-06 (cont. 10 — word-width unit tests)
+
+Expanded CpuTests with word-width ADD register-to-register tests. Mirroring byte-width flag boundary tests at 16-bit scale.
+
+## What Was Built
+
+* CpuTests.cs — 5 new word-width tests:
+  - Execute_AddAxBx_WordRegisterToRegister: 0x1000 + 0x2000 = 0x3000 (clean add, no flags except PF)
+  - Execute_AddAxBx_WordCarryAndAuxCarry: 0x000F + 0x0001 = 0x0010 (AF fires)
+  - Execute_AddAxBx_WordZeroFlag: 0x0000 + 0x0000 = 0x0000 (ZF + PF)
+  - Execute_AddAxBx_WordSignFlag: 0x8000 + 0x0001 = 0x8001 (SF fires)
+  - Execute_AddAxBx_WordOverflowFlag: 0x7FFF + 0x0001 = 0x8000 (OF + SF + PF + AF)
+  - Execute_AddAxBx_WordCarryOut: 0xFFFF + 0x0001 = 0x0000 (CF + ZF + PF + AF) — RED
+
+## Status
+
+* 12 of 13 CpuTests green. WordCarryOut is red — SetFlags or Execute has a bug when the result wraps to zero at word width. Need to investigate.
+
+## Open
+
+? WordCarryOut failure — 0xFFFF + 0x0001 wraps to 0x0000. CF, ZF, PF, AF should all fire. Something in the flag or result logic doesn't handle full word wrap correctly.
+? Immediate operand representation on DecodedInstruction — design question deferred until word-width tests are green.
+
+---
+
 # 2026-03-05 (cont. 9 — documentation pass, scope narrowing)
 
 Session focused on documentation and prioritization. No code changes.
