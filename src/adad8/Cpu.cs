@@ -130,7 +130,7 @@ public class Cpu
     public Memory Mem { get; } = new();
 
     // instruction queue
-    public byte[] Queue { get; set; } = [];
+    public byte[] InstructionQueue { get; set; } = [];
 
     // Why Get/Set methods when the properties each have them already you ask?
     // Interesting question! Enumeration translation. Going from Register.XX (enum)
@@ -244,6 +244,7 @@ public class Cpu
         // set execution flags for next instruction
         // this needs to be abstracted to a method, void SetFlags(DecodedInstruction di)
         // execute operation on source and destination
+        IP += (ushort)decodedInstruction.ByteLength;
         var result =
             GetRegisterValue(decodedInstruction.Source)
             + GetRegisterValue(decodedInstruction.Destination);
