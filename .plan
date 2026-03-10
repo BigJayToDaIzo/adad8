@@ -6,6 +6,52 @@ Notation: * accomplishment | ? open question | + resolved | ~ dropped
 
 ---
 
+# 2026-03-10 (cont. 11 — decoder architecture pivot + immediate operands)
+
+Pivoted decoder from bitfield extraction to opcode-indexed lookup tables. Added immediate-to-accumulator encoding support (0x04). Custom exception for invalid registers. README.
+
+## What Was Built
+
+* README.md — project overview, architecture, build instructions, .plan convention, links to Internet Archive copy of Intel manual.
+* InvalidRegisterException — custom exception replacing NotImplementedException in GetRegisterValue and the silent failure in SetRegisterValue. Three standard constructors, message includes offending register value via string interpolation.
+* EncodingFormat.cs — new enum (ModRM, ImmediateToAccumulator). Gates operand parsing strategy in Decode.
+* Decoder.cs — three lookup tables: `_transOperation[256]` (opcode → Operation), `_transFormat[256]` (opcode → EncodingFormat), `_hasModRM[256]` (legacy, now derived from _transFormat, on death row). Static constructor populates 0x00–0x03 as ModRM, 0x04–0x05 as ImmediateToAccumulator, all six as Operation.Add. Decode method switches on encoding format to choose parsing path.
+* Decoder.cs — immediate-to-accumulator path: destination set to AL/AX via `word ? Register.AX : Register.AL`, immediate read from `instructions[1]`.
+* DecodedInstruction.cs — added `ushort? Immediate` property for literal operand values.
+* Cpu.cs — InvalidRegisterException thrown in both Get/SetRegisterValue default arms with interpolated message containing the offending register value.
+* CLAUDE.md — new section documenting the decoder architecture pivot from bitfield extraction to opcode-indexed lookup tables, with table inventory.
+* CpuTests.cs — 3 new tests: GetRegisterValue_InvalidRegister_ThrowsInvalidRegisterException, SetRegisterValue_InvalidRegister_ThrowsInvalidRegisterException, GetRegisterValue_InvalidRegister_MessageContainsRegisterValue.
+* DecoderTests.cs — 1 new test: Decode_0x04_AddImmediateToAl. Existing Decode_0x03 test updated from `[0x03]` to `[0x03, 0xC8]` since decoder now requires ModR/M byte.
+* docs/Intel_8086_Family_Users_Manual.pdf removed from repo tracking, .gitignore updated with `docs/*.pdf`. README links to Internet Archive instead.
+
+## Key Decisions
+
++ Decoder architecture pivot — bit-shifting opcode >> 2 to derive operation broke at 0x04 (immediate-to-accumulator). Replaced with 256-entry lookup tables indexed by full opcode byte. 256 is a finite, knowable space; bit manipulation is unbounded complexity. Tables are dumb and correct; bit logic is clever and fragile.
++ One table per decoding question — operation, encoding format, ModR/M presence. Each answers a single concern. Pattern: indexed by opcode byte, populated at static init.
++ _hasModRM on death row — now derivable from `_transFormat[opcode] == EncodingFormat.ModRM`. Keeping it alive until tests confirm removal is safe.
++ InvalidRegisterException over NotImplementedException — domain-specific, includes offending register value in message. SetRegisterValue had no default case at all (silent failure), now throws.
++ SUB comment corrected: range is 0x28–0x2D, not 0x06–0x0B (0x06/0x07 are PUSH/POP ES).
+
+## Status
+
+* 21 of 22 tests green. 1 integration test (Opcode00Tests) skipped — waiting for complete ADD pipeline.
+* WordCarryOut bug resolved in prior session (PF mask length fix), .plan updated retroactively.
+
+## Resolved
+
++ WordCarryOut (0xFFFF + 0x0001) — fixed prior session, confirmed green.
++ PDF removed from repo — Internet Archive link in README.
+~ _hasModRM as standalone table — superseded by _transFormat, pending removal.
+
+## Open
+
+? Execute path for immediate operands — Cpu.Execute currently reads source from GetRegisterValue. Needs an `if (instruction.Immediate.HasValue)` branch to use the immediate value instead.
+? 0x05 (ADD AX, imm16) — needs word-width immediate reading (little-endian: `instructions[1] | instructions[2] << 8`). No test yet.
+? Memory operand representation on DecodedInstruction — gates MOD=00/01/10 addressing modes. Design still TBD.
+? 0x80–0x83 group (immediate to ModR/M) — REG field used as opcode extension, not a register. Future encoding format.
+
+---
+
 # 2026-03-06 (cont. 10 — word-width unit tests)
 
 Expanded CpuTests with word-width ADD register-to-register tests. Mirroring byte-width flag boundary tests at 16-bit scale.

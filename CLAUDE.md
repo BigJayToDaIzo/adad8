@@ -132,6 +132,24 @@ Same XOR relationship, borrow in place of carry. The recovery formula is identic
 
 The verbose approach requires branching on the operation (add vs subtract vs compare vs ...). The XOR trick is a single expression that works for any arithmetic operation because it derives carry/borrow from the observable inputs and result, regardless of how the result was computed.
 
+## 8088 Internals — Decoder Architecture: Bitfield Extraction → Opcode-Indexed Lookup Tables
+
+The first decoder implementation extracted meaning from bit positions within the opcode byte: shift right 2 to get the operation, mask bit 1 for direction, mask bit 0 for word width. This works when opcodes share a uniform bit layout — 0x00 through 0x03 all encode ADD with D and W bits in fixed positions.
+
+It breaks as soon as a different encoding format appears. ADD immediate-to-accumulator (0x04/0x05) has the same operation but a completely different byte layout — no ModR/M byte, data follows the opcode directly. The top 6 bits no longer map to the same operation value. Every new encoding family would require more conditional bit logic, and the complexity compounds with each one.
+
+The fix: stop scanning bits and start indexing by the full opcode byte. There are only 256 possible opcodes. A lookup table indexed by opcode byte is a finite, knowable space. It doesn't try to be clever — it answers the question directly for each opcode. Bit manipulation is unbounded complexity you have to reason about every time; a 256-entry table is dumb and correct.
+
+### Lookup tables identified so far
+
+| Table | Type | Question it answers |
+|---|---|---|
+| `_hasModRM[256]` | `bool[]` | Does this opcode need a ModR/M byte? |
+| `_transOperation[256]` | `Operation[]` | What operation does this opcode perform? |
+| `_opcodeFormat[256]` | enum | What encoding format are the operands in? (ModRM, ImmediateToAccumulator, ImmediateToModRM, etc.) |
+
+Additional tables will emerge as more opcodes reveal their encoding quirks. The pattern is: one table per decoding question, indexed by opcode byte, populated at static init.
+
 ## Gotchas
 
 ### Decoder tests with single-byte input for multi-byte opcodes
