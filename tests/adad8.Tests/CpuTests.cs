@@ -298,6 +298,31 @@ public class CpuTests
     }
 
     [Fact]
+    public void GetRegisterValue_InvalidRegister_ThrowsInvalidRegisterException()
+    {
+        var cpu = new Cpu();
+
+        Assert.Throws<InvalidRegisterException>(() => cpu.GetRegisterValue((Register)99));
+    }
+
+    [Fact]
+    public void GetRegisterValue_InvalidRegister_MessageContainsRegisterValue()
+    {
+        var cpu = new Cpu();
+        var ex = Assert.Throws<InvalidRegisterException>(() => cpu.GetRegisterValue((Register)99));
+
+        Assert.Contains("99", ex.Message);
+    }
+
+    [Fact]
+    public void SetRegisterValue_InvalidRegister_ThrowsInvalidRegisterException()
+    {
+        var cpu = new Cpu();
+
+        Assert.Throws<InvalidRegisterException>(() => cpu.SetRegisterValue((Register)99, 0x42));
+    }
+
+    [Fact]
     public void Execute_AdvancesIP_ByInstructionByteLength()
     {
         var cpu = new Cpu
