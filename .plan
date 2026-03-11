@@ -6,6 +6,44 @@ Notation: * accomplishment | ? open question | + resolved | ~ dropped
 
 ---
 
+# 2026-03-10 (cont. 12 — word immediates, PF fix, MemoryOperand design)
+
+Fixed long-standing PF bug, added word-width immediate support, designed and started implementing memory operand representation.
+
+## What Was Built
+
+* Decoder.cs — word-width immediate reading for 0x05 (ADD AX, imm16): `(ushort)(instructions[1] | (instructions[2] << 8))`. Little-endian reassembly via OR of non-overlapping bit positions.
+* Decoder.cs — removed `_hasModRM` legacy table. Was already superseded by `_transFormat`.
+* Cpu.cs — `SetFlags` signature: dropped nullable `?` from `int result` and `ushort source`. No scenario where these are legitimately null — nullability bled over from `DecodedInstruction.Source` being `Register?`.
+* Cpu.cs — PF computation: killed word/byte ternary. PF always checks low byte only (8080 legacy), so it's always `& 0xFF`. The ternary had the branches swapped, and neither branch was correct for the word case (`0xFFFF` instead of `0xFF`). Existing tests didn't catch it because no word test had an upper byte that would flip parity.
+* MemoryOperand.cs — new record with `Base` (Register?), `Index` (Register?), `Displacement` (short?). Represents the effective address components from MOD/R/M decoding.
+* CLAUDE.md — new "8088 Internals — Little-Endian Reassembly (Multi-Byte Immediates)" section documenting the OR-shift pattern, bit layout diagram, why OR not addition, and the ushort cast requirement.
+* DecoderTests.cs — `Decode_0x05_AddImmediateToAx`: asserts word immediate reconstructed from two bytes.
+* DecoderTests.cs — `Decode_0x00_ModRM_MemoryOperand_BxSi`: RED. Asserts decoder produces a MemoryOperand with Base=BX, Index=SI when MOD=00, R/M=000. Entry point for next session.
+* CpuTests.cs — `Execute_AddAxImmediate_WordImmediateToAccumulator`: 0x1000 + 0x1234 = 0x2234.
+* CpuTests.cs — `MemoryOperand_HoldsBaseIndexDisplacement`: shape test for the new record.
+
+## Key Decisions
+
++ MemoryOperand as separate type on DecodedInstruction — not a unified operand discriminated union, not flattened fields. Clean separation: `Register?` for register operands, `MemoryOperand?` for memory operands. Execute checks which is non-null.
++ Segment resolution lives in Execute, not the decoder — which segment register to use (DS vs SS) depends on the base register (BP → SS, else DS). That's execution logic, not encoding.
++ PF has no word/byte distinction — always low byte. One expression, no branching.
+~ _hasModRM table — removed. Fully superseded by _transFormat.
+
+## Status
+
+* 25 of 26 tests green. 1 integration test (Opcode00Tests) skipped. 1 decoder test RED (MemoryOperand_BxSi) — intentionally red, next session's entry point.
+
+## Open
+
+? MOD extraction in ParseModRMByte — currently assumes MOD=11 (register-to-register). Needs `(instruction >> 6) & 0b11` check to branch between register and memory operand paths.
+? DecodedInstruction needs `MemoryOperand?` property.
+? R/M lookup table for memory addressing modes — R/M field maps to different base+index combinations. Eight entries for MOD=00/01/10.
+? Execute memory read/write — needs to compute EA from MemoryOperand, apply segment, call Memory.ReadByte/WriteByte.
+? MOD=00 + R/M=110 special case — direct address (16-bit displacement, no base or index, not BP).
+
+---
+
 # 2026-03-10 (cont. 11 — decoder architecture pivot + immediate operands)
 
 Pivoted decoder from bitfield extraction to opcode-indexed lookup tables. Added immediate-to-accumulator encoding support (0x04). Custom exception for invalid registers. README.

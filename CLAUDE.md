@@ -132,6 +132,30 @@ Same XOR relationship, borrow in place of carry. The recovery formula is identic
 
 The verbose approach requires branching on the operation (add vs subtract vs compare vs ...). The XOR trick is a single expression that works for any arithmetic operation because it derives carry/borrow from the observable inputs and result, regardless of how the result was computed.
 
+## 8088 Internals — Little-Endian Reassembly (Multi-Byte Immediates)
+
+The 8088 stores multi-byte values in little-endian order: least significant byte first in memory. A 16-bit immediate like `0x1234` is stored as `[0x34, 0x12]` — low byte at the lower address, high byte at the higher address.
+
+To reconstruct the value from two consecutive bytes:
+
+```
+(ushort)(instructions[1] | (instructions[2] << 8))
+```
+
+`instructions[1]` (0x34) occupies bits 0–7. `instructions[2] << 8` shifts 0x12 up to bits 8–15. The two bytes now occupy non-overlapping bit positions:
+
+```
+instructions[1]          = 0000 0000 0011 0100   (0x34, bits 0–7)
+instructions[2] << 8     = 0001 0010 0000 0000   (0x12, bits 8–15)
+OR result                = 0001 0010 0011 0100   (0x1234)
+```
+
+OR merges them because the bit positions don't overlap — each byte's bits slot into their own lane. Addition would produce the same numeric result, but OR is idiomatic for bit-field assembly because it communicates intent: you're combining non-overlapping fields, not performing arithmetic.
+
+The cast to `ushort` is necessary because C# promotes bitwise operations on bytes/shorts to `int`. Without the cast, the result is `int` and won't assign to a `ushort?` property without complaint (CS0266).
+
+This pattern recurs anywhere the 8088 stores 16-bit values: immediates, displacements, and segment:offset addresses in memory.
+
 ## 8088 Internals — Decoder Architecture: Bitfield Extraction → Opcode-Indexed Lookup Tables
 
 The first decoder implementation extracted meaning from bit positions within the opcode byte: shift right 2 to get the operation, mask bit 1 for direction, mask bit 0 for word width. This works when opcodes share a uniform bit layout — 0x00 through 0x03 all encode ADD with D and W bits in fixed positions.
@@ -144,9 +168,8 @@ The fix: stop scanning bits and start indexing by the full opcode byte. There ar
 
 | Table | Type | Question it answers |
 |---|---|---|
-| `_hasModRM[256]` | `bool[]` | Does this opcode need a ModR/M byte? |
 | `_transOperation[256]` | `Operation[]` | What operation does this opcode perform? |
-| `_opcodeFormat[256]` | enum | What encoding format are the operands in? (ModRM, ImmediateToAccumulator, ImmediateToModRM, etc.) |
+| `_transFormat[256]` | `EncodingFormat[]` | What encoding format are the operands in? (ModRM, ImmediateToAccumulator, ImmediateToModRM, etc.) |
 
 Additional tables will emerge as more opcodes reveal their encoding quirks. The pattern is: one table per decoding question, indexed by opcode byte, populated at static init.
 

@@ -9,5 +9,6 @@ namespace adad8
     public Register? Destination { get; init; }
     public int ByteLength { get; init; }
     public ushort? Immediate { get; init; }
+    public MemoryOperand? MemoryOperand { get; init; }
   }
 }

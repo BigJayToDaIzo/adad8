@@ -229,9 +229,7 @@ public class Cpu
     // zero flag
     ZF = word ? (result & 0xFFFF) == 0 : (result & 0xFF) == 0;
     // parity flag (Intel legacy silliness)
-    PF = word
-      ? BitOperations.PopCount((uint)result & 0xFF) % 2 == 0
-      : BitOperations.PopCount((uint)result & 0xFFFF) % 2 == 0;
+    PF = BitOperations.PopCount((uint)result & 0xFF) % 2 == 0;
     // overflow flag
     var sourceSignBit = word ? source & 0x8000 : source & 0x80;
     var destSignBit = word ? destination & 0x8000 : destination & 0x80;
@@ -239,26 +237,18 @@ public class Cpu
     OF = (sourceSignBit == destSignBit) && resSignBit != sourceSignBit;
   }
 
-  // stub execute method
   public void Execute(DecodedInstruction decodedInstruction)
   {
-    // switch on op (wait till 2nd op before switch)
-    // set execution flags for next instruction
-    // this needs to be abstracted to a method, void SetFlags(DecodedInstruction di)
-    // execute operation on source and destination
     IP += (ushort)decodedInstruction.ByteLength;
-    var result =
-      GetRegisterValue(decodedInstruction.Source)
-      + GetRegisterValue(decodedInstruction.Destination);
-
-    // set result into destination
+    var source = decodedInstruction.Immediate ?? GetRegisterValue(decodedInstruction.Source);
+    var src_imdt = source + GetRegisterValue(decodedInstruction.Destination);
     SetFlags(
-      result,
-      GetRegisterValue(decodedInstruction.Source),
+      src_imdt,
+      source,
       GetRegisterValue(decodedInstruction.Destination),
       decodedInstruction.Word
     );
-    SetRegisterValue(decodedInstruction.Destination, (ushort)result);
+    SetRegisterValue(decodedInstruction.Destination, (ushort)src_imdt);
   }
 }
 

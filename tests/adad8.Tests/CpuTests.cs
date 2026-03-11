@@ -2,348 +2,415 @@ namespace adad8.Tests;
 
 public class CpuTests
 {
-    // register get method cuz enum translation to byte
-    [Fact]
-    public void GetRegisterValue_AL_ReturnsAlValue()
+  // register get method cuz enum translation to byte
+  [Fact]
+  public void GetRegisterValue_AL_ReturnsAlValue()
+  {
+    var cpu = new Cpu { AL = 0x42 };
+
+    Assert.Equal(0x42, cpu.GetRegisterValue(Register.AL));
+  }
+
+  // register set method cuz enum translation to byte
+  [Fact]
+  public void SetRegisterValue_AL_SetsAlValue()
+  {
+    var cpu = new Cpu();
+    cpu.SetRegisterValue(Register.AL, 0x42);
+
+    Assert.Equal(0x42, cpu.AL);
+  }
+
+  [Fact]
+  public void Execute_AddAlCl_ByteRegisterToRegister()
+  {
+    var cpu = new Cpu { AL = 0x10, CL = 0x20 };
+
+    var instruction = new DecodedInstruction
     {
-        var cpu = new Cpu { AL = 0x42 };
+      Operation = Operation.Add,
+      Direction = false,
+      Word = false,
+      Source = Register.CL,
+      Destination = Register.AL,
+    };
 
-        Assert.Equal(0x42, cpu.GetRegisterValue(Register.AL));
-    }
+    cpu.Execute(instruction);
 
-    // register set method cuz enum translation to byte
-    [Fact]
-    public void SetRegisterValue_AL_SetsAlValue()
+    Assert.Equal(0x30, cpu.AL);
+    Assert.False(cpu.CF);
+    Assert.False(cpu.ZF);
+    Assert.False(cpu.SF);
+    Assert.False(cpu.OF);
+    // checks number of on bits in the first byte of the instruction
+    Assert.True(cpu.PF);
+    Assert.False(cpu.AF);
+  }
+
+  [Fact]
+  public void Execute_AddAlImmediate_ByteImmediateToAccumulator()
+  {
+    var cpu = new Cpu { AL = 0x10 };
+
+    var instruction = new DecodedInstruction
     {
-        var cpu = new Cpu();
-        cpu.SetRegisterValue(Register.AL, 0x42);
+      Operation = Operation.Add,
+      Direction = false,
+      Word = false,
+      Source = null,
+      Destination = Register.AL,
+      Immediate = 0x42,
+    };
 
-        Assert.Equal(0x42, cpu.AL);
-    }
+    cpu.Execute(instruction);
 
-    [Fact]
-    public void Execute_AddAlCl_ByteRegisterToRegister()
+    Assert.Equal(0x52, cpu.AL);
+    Assert.False(cpu.CF);
+    Assert.False(cpu.ZF);
+    Assert.False(cpu.SF);
+    Assert.False(cpu.OF);
+    Assert.False(cpu.PF);
+    Assert.False(cpu.AF);
+  }
+
+  [Fact]
+  public void Execute_AddAxImmediate_WordImmediateToAccumulator()
+  {
+    var cpu = new Cpu { AX = 0x1000 };
+
+    var instruction = new DecodedInstruction
     {
-        var cpu = new Cpu { AL = 0x10, CL = 0x20 };
+      Operation = Operation.Add,
+      Direction = false,
+      Word = true,
+      Source = null,
+      Destination = Register.AX,
+      Immediate = 0x1234,
+    };
 
-        var instruction = new DecodedInstruction
-        {
-            Operation = Operation.Add,
-            Direction = false,
-            Word = false,
-            Source = Register.CL,
-            Destination = Register.AL,
-        };
+    cpu.Execute(instruction);
 
-        cpu.Execute(instruction);
+    Assert.Equal(0x2234, cpu.AX);
+    Assert.False(cpu.CF);
+    Assert.False(cpu.ZF);
+    Assert.False(cpu.SF);
+    Assert.False(cpu.OF);
+    Assert.False(cpu.PF);
+    Assert.False(cpu.AF);
+  }
 
-        Assert.Equal(0x30, cpu.AL);
-        Assert.False(cpu.CF);
-        Assert.False(cpu.ZF);
-        Assert.False(cpu.SF);
-        Assert.False(cpu.OF);
-        // checks number of on bits in the first byte of the instruction
-        Assert.True(cpu.PF);
-        Assert.False(cpu.AF);
-    }
+  [Fact]
+  public void Execute_AddAlCl_ByteCarryAndAuxCarry()
+  {
+    var cpu = new Cpu { AL = 0x0F, CL = 0x01 };
 
-    [Fact]
-    public void Execute_AddAlCl_ByteCarryAndAuxCarry()
+    var instruction = new DecodedInstruction
     {
-        var cpu = new Cpu { AL = 0x0F, CL = 0x01 };
+      Operation = Operation.Add,
+      Direction = false,
+      Word = false,
+      Source = Register.CL,
+      Destination = Register.AL,
+    };
 
-        var instruction = new DecodedInstruction
-        {
-            Operation = Operation.Add,
-            Direction = false,
-            Word = false,
-            Source = Register.CL,
-            Destination = Register.AL,
-        };
+    cpu.Execute(instruction);
 
-        cpu.Execute(instruction);
+    Assert.Equal(0x10, cpu.AL);
+    Assert.False(cpu.CF);
+    Assert.False(cpu.ZF);
+    Assert.False(cpu.SF);
+    Assert.False(cpu.OF);
+    Assert.False(cpu.PF);
+    Assert.True(cpu.AF);
+  }
 
-        Assert.Equal(0x10, cpu.AL);
-        Assert.False(cpu.CF);
-        Assert.False(cpu.ZF);
-        Assert.False(cpu.SF);
-        Assert.False(cpu.OF);
-        Assert.False(cpu.PF);
-        Assert.True(cpu.AF);
-    }
+  [Fact]
+  public void Execute_AddAlCl_ByteZeroFlag()
+  {
+    var cpu = new Cpu { AL = 0x00, CL = 0x00 };
 
-    [Fact]
-    public void Execute_AddAlCl_ByteZeroFlag()
+    var instruction = new DecodedInstruction
     {
-        var cpu = new Cpu { AL = 0x00, CL = 0x00 };
+      Operation = Operation.Add,
+      Direction = false,
+      Word = false,
+      Source = Register.CL,
+      Destination = Register.AL,
+    };
 
-        var instruction = new DecodedInstruction
-        {
-            Operation = Operation.Add,
-            Direction = false,
-            Word = false,
-            Source = Register.CL,
-            Destination = Register.AL,
-        };
+    cpu.Execute(instruction);
 
-        cpu.Execute(instruction);
+    Assert.Equal(0x00, cpu.AL);
+    Assert.True(cpu.ZF);
+    Assert.True(cpu.PF);
+    Assert.False(cpu.SF);
+    Assert.False(cpu.CF);
+    Assert.False(cpu.OF);
+    Assert.False(cpu.AF);
+  }
 
-        Assert.Equal(0x00, cpu.AL);
-        Assert.True(cpu.ZF);
-        Assert.True(cpu.PF);
-        Assert.False(cpu.SF);
-        Assert.False(cpu.CF);
-        Assert.False(cpu.OF);
-        Assert.False(cpu.AF);
-    }
+  [Fact]
+  public void Execute_AddAlCl_ByteSignFlag()
+  {
+    var cpu = new Cpu { AL = 0x80, CL = 0x01 };
 
-    [Fact]
-    public void Execute_AddAlCl_ByteSignFlag()
+    var instruction = new DecodedInstruction
     {
-        var cpu = new Cpu { AL = 0x80, CL = 0x01 };
+      Operation = Operation.Add,
+      Direction = false,
+      Word = false,
+      Source = Register.CL,
+      Destination = Register.AL,
+    };
 
-        var instruction = new DecodedInstruction
-        {
-            Operation = Operation.Add,
-            Direction = false,
-            Word = false,
-            Source = Register.CL,
-            Destination = Register.AL,
-        };
+    cpu.Execute(instruction);
 
-        cpu.Execute(instruction);
+    Assert.Equal(0x81, cpu.AL);
+    Assert.True(cpu.SF);
+    Assert.False(cpu.ZF);
+    Assert.False(cpu.CF);
+    Assert.False(cpu.OF);
+    Assert.True(cpu.PF);
+    Assert.False(cpu.AF);
+  }
 
-        Assert.Equal(0x81, cpu.AL);
-        Assert.True(cpu.SF);
-        Assert.False(cpu.ZF);
-        Assert.False(cpu.CF);
-        Assert.False(cpu.OF);
-        Assert.True(cpu.PF);
-        Assert.False(cpu.AF);
-    }
+  [Fact]
+  public void Execute_AddAlCl_ByteOverflowFlag()
+  {
+    var cpu = new Cpu { AL = 0x7F, CL = 0x01 };
 
-    [Fact]
-    public void Execute_AddAlCl_ByteOverflowFlag()
+    var instruction = new DecodedInstruction
     {
-        var cpu = new Cpu { AL = 0x7F, CL = 0x01 };
+      Operation = Operation.Add,
+      Direction = false,
+      Word = false,
+      Source = Register.CL,
+      Destination = Register.AL,
+    };
 
-        var instruction = new DecodedInstruction
-        {
-            Operation = Operation.Add,
-            Direction = false,
-            Word = false,
-            Source = Register.CL,
-            Destination = Register.AL,
-        };
+    cpu.Execute(instruction);
 
-        cpu.Execute(instruction);
+    Assert.Equal(0x80, cpu.AL);
+    Assert.True(cpu.OF);
+    Assert.True(cpu.SF);
+    Assert.False(cpu.ZF);
+    Assert.False(cpu.CF);
+    Assert.False(cpu.PF);
+    Assert.True(cpu.AF);
+  }
 
-        Assert.Equal(0x80, cpu.AL);
-        Assert.True(cpu.OF);
-        Assert.True(cpu.SF);
-        Assert.False(cpu.ZF);
-        Assert.False(cpu.CF);
-        Assert.False(cpu.PF);
-        Assert.True(cpu.AF);
-    }
+  [Fact]
+  public void Execute_AddAxBx_WordRegisterToRegister()
+  {
+    var cpu = new Cpu { AX = 0x1000, BX = 0x2000 };
 
-    [Fact]
-    public void Execute_AddAxBx_WordRegisterToRegister()
+    var instruction = new DecodedInstruction
     {
-        var cpu = new Cpu { AX = 0x1000, BX = 0x2000 };
+      Operation = Operation.Add,
+      Direction = false,
+      Word = true,
+      Source = Register.BX,
+      Destination = Register.AX,
+    };
 
-        var instruction = new DecodedInstruction
-        {
-            Operation = Operation.Add,
-            Direction = false,
-            Word = true,
-            Source = Register.BX,
-            Destination = Register.AX,
-        };
+    cpu.Execute(instruction);
 
-        cpu.Execute(instruction);
+    Assert.Equal(0x3000, cpu.AX);
+    Assert.False(cpu.CF);
+    Assert.False(cpu.ZF);
+    Assert.False(cpu.SF);
+    Assert.False(cpu.OF);
+    Assert.True(cpu.PF);
+    Assert.False(cpu.AF);
+  }
 
-        Assert.Equal(0x3000, cpu.AX);
-        Assert.False(cpu.CF);
-        Assert.False(cpu.ZF);
-        Assert.False(cpu.SF);
-        Assert.False(cpu.OF);
-        Assert.True(cpu.PF);
-        Assert.False(cpu.AF);
-    }
+  [Fact]
+  public void Execute_AddAxBx_WordCarryAndAuxCarry()
+  {
+    var cpu = new Cpu { AX = 0x000F, BX = 0x0001 };
 
-    [Fact]
-    public void Execute_AddAxBx_WordCarryAndAuxCarry()
+    var instruction = new DecodedInstruction
     {
-        var cpu = new Cpu { AX = 0x000F, BX = 0x0001 };
+      Operation = Operation.Add,
+      Direction = false,
+      Word = true,
+      Source = Register.BX,
+      Destination = Register.AX,
+    };
 
-        var instruction = new DecodedInstruction
-        {
-            Operation = Operation.Add,
-            Direction = false,
-            Word = true,
-            Source = Register.BX,
-            Destination = Register.AX,
-        };
+    cpu.Execute(instruction);
 
-        cpu.Execute(instruction);
+    Assert.Equal(0x0010, cpu.AX);
+    Assert.False(cpu.CF);
+    Assert.False(cpu.ZF);
+    Assert.False(cpu.SF);
+    Assert.False(cpu.OF);
+    Assert.False(cpu.PF);
+    Assert.True(cpu.AF);
+  }
 
-        Assert.Equal(0x0010, cpu.AX);
-        Assert.False(cpu.CF);
-        Assert.False(cpu.ZF);
-        Assert.False(cpu.SF);
-        Assert.False(cpu.OF);
-        Assert.False(cpu.PF);
-        Assert.True(cpu.AF);
-    }
+  [Fact]
+  public void Execute_AddAxBx_WordZeroFlag()
+  {
+    var cpu = new Cpu { AX = 0x0000, BX = 0x0000 };
 
-    [Fact]
-    public void Execute_AddAxBx_WordZeroFlag()
+    var instruction = new DecodedInstruction
     {
-        var cpu = new Cpu { AX = 0x0000, BX = 0x0000 };
+      Operation = Operation.Add,
+      Direction = false,
+      Word = true,
+      Source = Register.BX,
+      Destination = Register.AX,
+    };
 
-        var instruction = new DecodedInstruction
-        {
-            Operation = Operation.Add,
-            Direction = false,
-            Word = true,
-            Source = Register.BX,
-            Destination = Register.AX,
-        };
+    cpu.Execute(instruction);
 
-        cpu.Execute(instruction);
+    Assert.Equal(0x0000, cpu.AX);
+    Assert.True(cpu.ZF);
+    Assert.True(cpu.PF);
+    Assert.False(cpu.SF);
+    Assert.False(cpu.CF);
+    Assert.False(cpu.OF);
+    Assert.False(cpu.AF);
+  }
 
-        Assert.Equal(0x0000, cpu.AX);
-        Assert.True(cpu.ZF);
-        Assert.True(cpu.PF);
-        Assert.False(cpu.SF);
-        Assert.False(cpu.CF);
-        Assert.False(cpu.OF);
-        Assert.False(cpu.AF);
-    }
+  [Fact]
+  public void Execute_AddAxBx_WordSignFlag()
+  {
+    var cpu = new Cpu { AX = 0x8000, BX = 0x0001 };
 
-    [Fact]
-    public void Execute_AddAxBx_WordSignFlag()
+    var instruction = new DecodedInstruction
     {
-        var cpu = new Cpu { AX = 0x8000, BX = 0x0001 };
+      Operation = Operation.Add,
+      Direction = false,
+      Word = true,
+      Source = Register.BX,
+      Destination = Register.AX,
+    };
 
-        var instruction = new DecodedInstruction
-        {
-            Operation = Operation.Add,
-            Direction = false,
-            Word = true,
-            Source = Register.BX,
-            Destination = Register.AX,
-        };
+    cpu.Execute(instruction);
 
-        cpu.Execute(instruction);
+    Assert.Equal(0x8001, cpu.AX);
+    Assert.True(cpu.SF);
+    Assert.False(cpu.ZF);
+    Assert.False(cpu.CF);
+    Assert.False(cpu.OF);
+    Assert.False(cpu.PF);
+    Assert.False(cpu.AF);
+  }
 
-        Assert.Equal(0x8001, cpu.AX);
-        Assert.True(cpu.SF);
-        Assert.False(cpu.ZF);
-        Assert.False(cpu.CF);
-        Assert.False(cpu.OF);
-        Assert.False(cpu.PF);
-        Assert.False(cpu.AF);
-    }
+  [Fact]
+  public void Execute_AddAxBx_WordOverflowFlag()
+  {
+    var cpu = new Cpu { AX = 0x7FFF, BX = 0x0001 };
 
-    [Fact]
-    public void Execute_AddAxBx_WordOverflowFlag()
+    var instruction = new DecodedInstruction
     {
-        var cpu = new Cpu { AX = 0x7FFF, BX = 0x0001 };
+      Operation = Operation.Add,
+      Direction = false,
+      Word = true,
+      Source = Register.BX,
+      Destination = Register.AX,
+    };
 
-        var instruction = new DecodedInstruction
-        {
-            Operation = Operation.Add,
-            Direction = false,
-            Word = true,
-            Source = Register.BX,
-            Destination = Register.AX,
-        };
+    cpu.Execute(instruction);
 
-        cpu.Execute(instruction);
+    Assert.Equal(0x8000, cpu.AX);
+    Assert.True(cpu.OF);
+    Assert.True(cpu.SF);
+    Assert.False(cpu.ZF);
+    Assert.False(cpu.CF);
+    Assert.True(cpu.PF);
+    Assert.True(cpu.AF);
+  }
 
-        Assert.Equal(0x8000, cpu.AX);
-        Assert.True(cpu.OF);
-        Assert.True(cpu.SF);
-        Assert.False(cpu.ZF);
-        Assert.False(cpu.CF);
-        Assert.True(cpu.PF);
-        Assert.True(cpu.AF);
-    }
+  [Fact]
+  public void Execute_AddAxBx_WordCarryOut()
+  {
+    var cpu = new Cpu { AX = 0xFFFF, BX = 0x0001 };
 
-    [Fact]
-    public void Execute_AddAxBx_WordCarryOut()
+    var instruction = new DecodedInstruction
     {
-        var cpu = new Cpu { AX = 0xFFFF, BX = 0x0001 };
+      Operation = Operation.Add,
+      Direction = false,
+      Word = true,
+      Source = Register.BX,
+      Destination = Register.AX,
+    };
 
-        var instruction = new DecodedInstruction
-        {
-            Operation = Operation.Add,
-            Direction = false,
-            Word = true,
-            Source = Register.BX,
-            Destination = Register.AX,
-        };
+    cpu.Execute(instruction);
 
-        cpu.Execute(instruction);
+    Assert.Equal(0x0000, cpu.AX);
+    Assert.True(cpu.CF);
+    Assert.True(cpu.ZF);
+    Assert.True(cpu.PF);
+    Assert.False(cpu.SF);
+    Assert.False(cpu.OF);
+    Assert.True(cpu.AF);
+  }
 
-        Assert.Equal(0x0000, cpu.AX);
-        Assert.True(cpu.CF);
-        Assert.True(cpu.ZF);
-        Assert.True(cpu.PF);
-        Assert.False(cpu.SF);
-        Assert.False(cpu.OF);
-        Assert.True(cpu.AF);
-    }
+  [Fact]
+  public void GetRegisterValue_InvalidRegister_ThrowsInvalidRegisterException()
+  {
+    var cpu = new Cpu();
 
-    [Fact]
-    public void GetRegisterValue_InvalidRegister_ThrowsInvalidRegisterException()
+    Assert.Throws<InvalidRegisterException>(() => cpu.GetRegisterValue((Register)99));
+  }
+
+  [Fact]
+  public void GetRegisterValue_InvalidRegister_MessageContainsRegisterValue()
+  {
+    var cpu = new Cpu();
+    var ex = Assert.Throws<InvalidRegisterException>(() => cpu.GetRegisterValue((Register)99));
+
+    Assert.Contains("99", ex.Message);
+  }
+
+  [Fact]
+  public void SetRegisterValue_InvalidRegister_ThrowsInvalidRegisterException()
+  {
+    var cpu = new Cpu();
+
+    Assert.Throws<InvalidRegisterException>(() => cpu.SetRegisterValue((Register)99, 0x42));
+  }
+
+  [Fact]
+  public void Execute_AdvancesIP_ByInstructionByteLength()
+  {
+    var cpu = new Cpu
     {
-        var cpu = new Cpu();
+      IP = 0x0000,
+      AL = 0x10,
+      CL = 0x20,
+    };
 
-        Assert.Throws<InvalidRegisterException>(() => cpu.GetRegisterValue((Register)99));
-    }
-
-    [Fact]
-    public void GetRegisterValue_InvalidRegister_MessageContainsRegisterValue()
+    var instruction = new DecodedInstruction
     {
-        var cpu = new Cpu();
-        var ex = Assert.Throws<InvalidRegisterException>(() => cpu.GetRegisterValue((Register)99));
+      Operation = Operation.Add,
+      Direction = false,
+      Word = false,
+      Source = Register.CL,
+      Destination = Register.AL,
+      ByteLength = 2,
+    };
 
-        Assert.Contains("99", ex.Message);
-    }
+    cpu.Execute(instruction);
 
-    [Fact]
-    public void SetRegisterValue_InvalidRegister_ThrowsInvalidRegisterException()
+    Assert.Equal(0x0002, cpu.IP);
+  }
+
+  [Fact]
+  public void MemoryOperand_HoldsBaseIndexDisplacement()
+  {
+    var operand = new MemoryOperand
     {
-        var cpu = new Cpu();
+      Base = Register.BX,
+      Index = Register.SI,
+      Displacement = 0x05,
+    };
 
-        Assert.Throws<InvalidRegisterException>(() => cpu.SetRegisterValue((Register)99, 0x42));
-    }
-
-    [Fact]
-    public void Execute_AdvancesIP_ByInstructionByteLength()
-    {
-        var cpu = new Cpu
-        {
-            IP = 0x0000,
-            AL = 0x10,
-            CL = 0x20,
-        };
-
-        var instruction = new DecodedInstruction
-        {
-            Operation = Operation.Add,
-            Direction = false,
-            Word = false,
-            Source = Register.CL,
-            Destination = Register.AL,
-            ByteLength = 2,
-        };
-
-        cpu.Execute(instruction);
-
-        Assert.Equal(0x0002, cpu.IP);
-    }
+    Assert.Equal(Register.BX, operand.Base);
+    Assert.Equal(Register.SI, operand.Index);
+    Assert.Equal((short?)0x05, operand.Displacement);
+  }
 }
