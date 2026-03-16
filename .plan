@@ -6,6 +6,46 @@ Notation: * accomplishment | ? open question | + resolved | ~ dropped
 
 ---
 
+# 2026-03-12 (cont. 13 — MOD!=11 memory addressing, first MemoryOperand green)
+
+Wired up the first memory addressing mode through the decoder. MOD=00 R/M=000 ([BX+SI]) now decodes into a MemoryOperand on DecodedInstruction.
+
+## What Was Built
+
+* Decoder.cs — `_transRM` lookup table: 8-entry `(Register?, Register?)[]` indexed by R/M value. Maps R/M field to base/index register combinations for memory addressing modes (MOD!=11). Sourced from Intel manual Table 4-10.
+* Decoder.cs — `ParseModRMByte` return type expanded to `(Register? reg, Register? rm, MemoryOperand? memOp)`. MOD=11 returns registers + null memOp. MOD!=11 returns reg + null rm + populated MemoryOperand.
+* Decoder.cs — `offset` renamed to `regEnumBank` — was confusable with memory displacement. It's the enum stride (0 or 8) selecting byte vs word register bank.
+* Decoder.cs — removed `isImmediateToAcc` intermediate binding, inlined both `_transFormat` checks directly in the if/else-if conditions.
+* DecoderTests.cs — `Decode_0x00_ModRM_MemoryOperand_BxSi` now GREEN. Asserts MOD=00, R/M=000 produces MemoryOperand with Base=BX, Index=SI, Displacement=null.
+
+## Key Decisions
+
++ `_transRM` table answers "which registers participate in this effective address?" — indexed by R/M value (0–7), same pattern as `_transOperation` and `_transFormat`. Eight entries covering all base/index combinations from Intel Table 4-10.
++ ParseModRMByte owns the MOD branch — it knows what mod means and returns the right shape. Decode doesn't re-interpret raw fields.
++ MemoryOperand constructed inside ParseModRMByte, not in Decode — the method that understands the mode is the method that builds the object.
++ Return tuple `(reg, rm, memOp)` where rm and memOp are mutually exclusive nulls — not elegant, but obvious. C# lacks discriminated unions.
+
+## Status
+
+* 26 of 27 tests green. 1 integration test (Opcode00Tests) skipped.
+
+## Next Session — MOD=01 and MOD=10 (displacement modes)
+
+MOD=01 and MOD=10 use the same base/index registers from `_transRM` but add displacement bytes from the instruction stream:
+- **MOD=01**: 8-bit displacement at `instructions[2]`, sign-extended to 16 bits. `ByteLength` grows by 1.
+- **MOD=10**: 16-bit displacement at `instructions[2]` and `instructions[3]` (little-endian reassembly, same OR-shift pattern as 0x05 word immediate). `ByteLength` grows by 2.
+- ParseModRMByte currently doesn't read displacement bytes — it only sees the ModR/M byte itself. The displacement bytes come from the instruction stream, which only `Decode` has access to. Either pass more bytes into ParseModRMByte, or have Decode read the displacement after ParseModRMByte returns the mode.
+- Displacement populates `MemoryOperand.Displacement` (currently always null).
+
+## Open
+
+? MOD=00 + R/M=110 special case — direct address (16-bit displacement, no base or index, not BP). `_transRM[6]` currently returns `(BP, null)` which is correct for MOD=01/10 but wrong for MOD=00.
+? Where does displacement reading belong — ParseModRMByte (needs instruction bytes passed in) or Decode (needs mode value passed back out)?
+? Direction bit + MemoryOperand interaction in Execute — when the memory operand is the destination, Execute needs to write to memory, not a register. When it's the source, Execute reads from memory. Not yet wired.
+? `ByteLength` is currently `instructions.Length` which is whatever the test passes in — not computed by the decoder. Will need to be calculated from opcode + format + mod as encoding grows.
+
+---
+
 # 2026-03-10 (cont. 12 — word immediates, PF fix, MemoryOperand design)
 
 Fixed long-standing PF bug, added word-width immediate support, designed and started implementing memory operand representation.
