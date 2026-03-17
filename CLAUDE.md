@@ -170,6 +170,7 @@ The fix: stop scanning bits and start indexing by the full opcode byte. There ar
 |---|---|---|
 | `_transOperation[256]` | `Operation[]` | What operation does this opcode perform? |
 | `_transFormat[256]` | `EncodingFormat[]` | What encoding format are the operands in? (ModRM, ImmediateToAccumulator, ImmediateToModRM, etc.) |
+| `_transRM[8]` | `(Register?, Register?)[]` | What base/index register pair does this R/M field encode? (for memory addressing modes) |
 
 Additional tables will emerge as more opcodes reveal their encoding quirks. The pattern is: one table per decoding question, indexed by opcode byte, populated at static init.
 
@@ -182,3 +183,35 @@ Some decoder unit tests (e.g. `Decode_0x03`) pass only the opcode byte to valida
 ### AF formula is ADD-only until SUB lands
 
 `SetFlags` currently computes AF with the verbose nibble-add approach: `(source & 0x0F) + (destination & 0x0F) > 0x0F`. This only works for ADD. When SUB is implemented, replace with the operation-agnostic XOR trick: `(source ^ destination ^ result) & 0x10`. The derivation is documented above in the AF section. Leave as-is while building out ADD to completion.
+
+## 8088 Internals — Execute Source Resolution: Three-Way Operand Dispatch
+
+`Execute` needs to resolve a source operand value before it can do anything. There are exactly three places a source value can come from, and for any given instruction exactly one is populated:
+
+| Source type | DecodedInstruction field | How to get the value |
+|---|---|---|
+| Immediate | `Immediate` (non-null) | Use it directly (it's already a `ushort`) |
+| Memory | `MemoryOperand` (non-null), `Source` is null | `ResolveEffectiveAddress` → `Mem.ReadByte` (or two-byte read for word) |
+| Register | `Source` (non-null) | `GetRegisterValue(Source)` |
+
+This was extracted into `Cpu.DecodeSource(DecodedInstruction)` which returns a `ushort` — the resolved value regardless of where it came from. `Execute` never has to think about operand sourcing; it just gets a number.
+
+### Address vs Value — the indirection trap
+
+`ResolveEffectiveAddress` returns *where* the operand lives. `Mem.ReadByte` returns *what's there*. Forgetting to dereference (using the address as the value) is an easy mistake — the test catches it because the address (e.g. `0x0200`) won't match the expected result computed from the stored value (e.g. `0x05`).
+
+## Current Development State
+
+### What works (29 tests green)
+- ADD register-to-register: byte and word, all 6 status flags, all edge cases (carry, overflow, zero, sign, aux carry)
+- ADD immediate-to-accumulator: byte (AL) and word (AX)
+- ADD byte memory source: MemoryOperand → ResolveEffectiveAddress → ReadByte → add to register
+- IP advancement by instruction byte length
+- Effective address resolution (base + index + displacement)
+- Decoder: opcode lookup tables, ModR/M parsing for MOD=11 and MOD=00, ImmediateToAccumulator format
+
+### What's next
+1. Word-width memory read — `ADD AX, [BX]` forces little-endian two-byte read in DecodeSource
+2. Memory as destination — write path (`ADD [BX], AL`) requires WriteByte after execute
+3. MOD=01 and MOD=10 — 8-bit sign-extended and 16-bit displacements in ParseModRMByte
+4. Opcode00 integration test unskip — once the full ADD pipeline handles all addressing modes

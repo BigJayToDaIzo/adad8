@@ -76,7 +76,6 @@ public class Cpu
     // flags — 16-bit source of truth, computed bool properties
     // flags ordered from least to most significant bit, we're
     // flowing down instead of left! Notice odd skipping of bits yo!
-    // the cool thing about bits, you can leave em turned off from time to time!
     public ushort Flags { get; set; }
     public bool CF
     {
@@ -237,11 +236,37 @@ public class Cpu
         OF = (sourceSignBit == destSignBit) && resSignBit != sourceSignBit;
     }
 
+    public ushort ResolveEffectiveAddress(MemoryOperand memOp)
+    {
+        var mBase = memOp.Base != null ? GetRegisterValue(memOp.Base) : 0;
+        var mIndex = memOp.Index != null ? GetRegisterValue(memOp.Index) : 0;
+        var mDisplacement = memOp.Displacement != null ? memOp.Displacement : 0;
+        return (ushort)(mBase + mIndex + mDisplacement);
+    }
+
+    public ushort DecodeSource(DecodedInstruction decodedInstruction)
+    {
+        if (decodedInstruction.Immediate != null)
+        {
+            return (ushort)decodedInstruction.Immediate;
+        }
+        else if (decodedInstruction.MemoryOperand != null)
+        {
+            return Mem.ReadByte(ResolveEffectiveAddress(decodedInstruction.MemoryOperand));
+        }
+        else
+        {
+            return GetRegisterValue(decodedInstruction.Source);
+        }
+    }
+
     public void Execute(DecodedInstruction decodedInstruction)
     {
         // Instruction Pointer
         IP += (ushort)decodedInstruction.ByteLength;
-        var source = decodedInstruction.Immediate ?? GetRegisterValue(decodedInstruction.Source);
+        // we need null checking here on source
+        // var source = decodedInstruction.Immediate ?? GetRegisterValue(decodedInstruction.Source);
+        var source = DecodeSource(decodedInstruction);
         var src_imdt = source + GetRegisterValue(decodedInstruction.Destination);
         SetFlags(
             src_imdt,
