@@ -156,6 +156,16 @@ The cast to `ushort` is necessary because C# promotes bitwise operations on byte
 
 This pattern recurs anywhere the 8088 stores 16-bit values: immediates, displacements, and segment:offset addresses in memory.
 
+## 8088 Internals — Sign Extension via Signed Cast
+
+When the 8088 needs an 8-bit value sign-extended to 16 bits (MOD=01 displacements, relative jumps, 0x83 group sign-extended immediates), C# handles two's complement through the type system:
+
+```
+(sbyte)byteValue
+```
+
+`(sbyte)` reinterprets the unsigned byte as signed (-128 to 127). Implicit widening to `short` preserves the sign. `0xFC` → `(sbyte)` → -4 → assigns to `short` → -4. No manual bit flipping needed.
+
 ## 8088 Internals — Decoder Architecture: Bitfield Extraction → Opcode-Indexed Lookup Tables
 
 The first decoder implementation extracted meaning from bit positions within the opcode byte: shift right 2 to get the operation, mask bit 1 for direction, mask bit 0 for word width. This works when opcodes share a uniform bit layout — 0x00 through 0x03 all encode ADD with D and W bits in fixed positions.
@@ -175,10 +185,6 @@ The fix: stop scanning bits and start indexing by the full opcode byte. There ar
 Additional tables will emerge as more opcodes reveal their encoding quirks. The pattern is: one table per decoding question, indexed by opcode byte, populated at static init.
 
 ## Gotchas
-
-### Decoder tests with single-byte input for multi-byte opcodes
-
-Some decoder unit tests (e.g. `Decode_0x03`) pass only the opcode byte to validate first-byte decoding (operation, D bit, W bit). This is a valid test — it proves the opcode resolution layer works in isolation. However, opcodes like 0x03 require a ModR/M byte. When that opcode gets registered in `_hasModRM`, the decoder will expect byte 2, and the test may need its input extended (e.g. `[0x03]` → `[0x03, 0xC8]`) depending on how the decoder handles missing bytes. Not a bug — just a test that will announce itself when the decoder grows.
 
 ### AF formula is ADD-only until SUB lands
 
@@ -202,16 +208,16 @@ This was extracted into `Cpu.DecodeSource(DecodedInstruction)` which returns a `
 
 ## Current Development State
 
-### What works (29 tests green)
+### What works (31 tests green)
 - ADD register-to-register: byte and word, all 6 status flags, all edge cases (carry, overflow, zero, sign, aux carry)
 - ADD immediate-to-accumulator: byte (AL) and word (AX)
 - ADD byte memory source: MemoryOperand → ResolveEffectiveAddress → ReadByte → add to register
 - IP advancement by instruction byte length
 - Effective address resolution (base + index + displacement)
-- Decoder: opcode lookup tables, ModR/M parsing for MOD=11 and MOD=00, ImmediateToAccumulator format
+- Decoder: opcode lookup tables, ModR/M parsing for MOD=11, MOD=00, MOD=01, MOD=10, ImmediateToAccumulator format
 
 ### What's next
 1. Word-width memory read — `ADD AX, [BX]` forces little-endian two-byte read in DecodeSource
 2. Memory as destination — write path (`ADD [BX], AL`) requires WriteByte after execute
-3. MOD=01 and MOD=10 — 8-bit sign-extended and 16-bit displacements in ParseModRMByte
+3. MOD=00 + R/M=110 special case — direct address (16-bit displacement, no base/index)
 4. Opcode00 integration test unskip — once the full ADD pipeline handles all addressing modes

@@ -70,8 +70,40 @@ public class DecoderTests
     Assert.Equal(Operation.Add, instruction.Operation);
     Assert.Equal(Register.AL, instruction.Source);
     Assert.NotNull(instruction.MemoryOperand);
-    Assert.Equal(Register.BX, instruction.MemoryOperand!.Base);
-    Assert.Equal(Register.SI, instruction.MemoryOperand!.Index);
-    Assert.Null(instruction.MemoryOperand!.Displacement);
+    Assert.Equal(Register.BX, instruction.MemoryOperand.Base);
+    Assert.Equal(Register.SI, instruction.MemoryOperand.Index);
+    Assert.Null(instruction.MemoryOperand.Displacement);
+  }
+
+  [Fact]
+  public void Decode_0x00_ModRM_Mod01_BxSi_Displacement8()
+  {
+    // 0x00 = ADD r/m8, r8 (d=0, w=0)
+    // ModR/M byte 0x40 = MOD=01, REG=000 (AL), R/M=000 ([BX+SI+disp8])
+    // Displacement byte 0xFC = -4 signed
+    var instruction = Decoder.Decode([0x00, 0x40, 0xFC]);
+
+    Assert.Equal(Operation.Add, instruction.Operation);
+    Assert.Equal(Register.AL, instruction.Source);
+    Assert.NotNull(instruction.MemoryOperand);
+    Assert.Equal(Register.BX, instruction.MemoryOperand.Base);
+    Assert.Equal(Register.SI, instruction.MemoryOperand.Index);
+    Assert.Equal((short)-4, instruction.MemoryOperand.Displacement);
+  }
+
+  [Fact]
+  public void Decode_0x00_ModRM_Mod10_BxSi_Displacement16()
+  {
+    // 0x00 = ADD r/m8, r8 (d=0, w=0)
+    // ModR/M byte 0x80 = MOD=10, REG=000 (AL), R/M=000 ([BX+SI+disp16])
+    // Displacement bytes 0x00, 0x10 = 0x1000 (little-endian)
+    var instruction = Decoder.Decode([0x00, 0x80, 0x00, 0x10]);
+
+    Assert.Equal(Operation.Add, instruction.Operation);
+    Assert.Equal(Register.AL, instruction.Source);
+    Assert.NotNull(instruction.MemoryOperand);
+    Assert.Equal(Register.BX, instruction.MemoryOperand.Base);
+    Assert.Equal(Register.SI, instruction.MemoryOperand.Index);
+    Assert.Equal((short)0x1000, instruction.MemoryOperand.Displacement);
   }
 }
