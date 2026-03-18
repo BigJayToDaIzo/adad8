@@ -206,18 +206,51 @@ This was extracted into `Cpu.DecodeSource(DecodedInstruction)` which returns a `
 
 `ResolveEffectiveAddress` returns *where* the operand lives. `Mem.ReadByte` returns *what's there*. Forgetting to dereference (using the address as the value) is an easy mistake — the test catches it because the address (e.g. `0x0200`) won't match the expected result computed from the stored value (e.g. `0x05`).
 
+## 8088 Internals — Segment:Offset Physical Address Calculation
+
+The 8088 computes 20-bit physical addresses from a 16-bit segment and a 16-bit offset:
+
+```
+physical_address = ((segment << 4) + offset) & 0xFFFFF
+```
+
+Two wrapping boundaries matter:
+
+1. **Offset wraps at 16 bits.** The effective address (base + index + displacement) is computed as a 16-bit value. If the sum exceeds 0xFFFF, it wraps. This must happen *before* the segment is added.
+
+2. **Physical address wraps at 20 bits.** After adding `segment << 4`, the result is masked to 20 bits (`& 0xFFFFF`). This is the real-mode 1MB address space boundary.
+
+### Segment selection rules
+
+Every memory access uses a segment register. The default depends on the base register:
+
+| Base register | Default segment | Why |
+|---|---|---|
+| BP | SS | BP is the stack frame pointer — stack-relative access |
+| Everything else (BX, SI, DI, none) | DS | Data segment is the default |
+
+The decoder determines the segment at decode time and stores it on `MemoryOperand.Segment`. `ResolveEffectiveAddress` reads it and computes the full physical address.
+
+### Implementation note
+
+`ResolveEffectiveAddress` must compute the offset first (base + index + displacement), wrap it to 16 bits, *then* add `segment << 4`, and wrap the final result to 20 bits. Getting the order wrong produces addresses that are off by 0x10000 — which reads/writes the wrong memory location entirely.
+
 ## Current Development State
 
-### What works (31 tests green)
-- ADD register-to-register: byte and word, all 6 status flags, all edge cases (carry, overflow, zero, sign, aux carry)
+### What works (40 unit tests green, integration test partially passing)
+- ADD register-to-register: byte and word, all 6 status flags, all edge cases
 - ADD immediate-to-accumulator: byte (AL) and word (AX)
-- ADD byte memory source: MemoryOperand → ResolveEffectiveAddress → ReadByte → add to register
+- ADD memory as source: byte and word (little-endian two-byte read)
+- ADD memory as destination: byte and word (little-endian two-byte write)
+- MOD=00 + R/M=110 direct address special case
 - IP advancement by instruction byte length
-- Effective address resolution (base + index + displacement)
-- Decoder: opcode lookup tables, ModR/M parsing for MOD=11, MOD=00, MOD=01, MOD=10, ImmediateToAccumulator format
+- Effective address resolution (base + index + displacement + segment)
+- Segment register support: CS, DS, SS, ES added to Register enum
+- Decoder: segment assignment on MemoryOperand (BP→SS, else→DS)
+- Decoder: opcode lookup tables, ModR/M parsing for all MOD modes, ImmediateToAccumulator format
+- Opcode00 integration test running — passes first test case, fails on second due to offset wrapping
 
 ### What's next
-1. Word-width memory read — `ADD AX, [BX]` forces little-endian two-byte read in DecodeSource
-2. Memory as destination — write path (`ADD [BX], AL`) requires WriteByte after execute
-3. MOD=00 + R/M=110 special case — direct address (16-bit displacement, no base/index)
-4. Opcode00 integration test unskip — once the full ADD pipeline handles all addressing modes
+1. Fix ResolveEffectiveAddress offset wrapping — offset must wrap at 16 bits before segment is added, final address wraps at 20 bits
+2. Continue running Opcode00 integration test suite (10,000 tests) to find remaining edge cases
+3. Duplicate memory read pattern in DecodeSource and Execute — candidate for ReadWord helper on Memory class

@@ -405,6 +405,117 @@ public class CpuTests
     }
 
     [Fact]
+    public void Execute_AddMemBxAl_ByteToMemory()
+    {
+        var cpu = new Cpu { AL = 0x10, BX = 0x0200 };
+        cpu.Mem.WriteByte(0x0200, 0x05);
+
+        var instruction = new DecodedInstruction
+        {
+            Operation = Operation.Add,
+            Direction = false,
+            Word = false,
+            Source = Register.AL,
+            Destination = null,
+            MemoryOperand = new MemoryOperand { Base = Register.BX },
+        };
+
+        cpu.Execute(instruction);
+
+        Assert.Equal(0x15, cpu.Mem.ReadByte(0x0200));
+        Assert.False(cpu.CF);
+        Assert.False(cpu.ZF);
+        Assert.False(cpu.SF);
+        Assert.False(cpu.OF);
+        Assert.False(cpu.PF);
+        Assert.False(cpu.AF);
+    }
+
+    [Fact]
+    public void Execute_AddMemBxAx_WordToMemory()
+    {
+        var cpu = new Cpu { AX = 0x1000, BX = 0x0200 };
+        cpu.Mem.WriteByte(0x0200, 0x34);
+        cpu.Mem.WriteByte(0x0201, 0x12);
+
+        var instruction = new DecodedInstruction
+        {
+            Operation = Operation.Add,
+            Direction = false,
+            Word = true,
+            Source = Register.AX,
+            Destination = null,
+            MemoryOperand = new MemoryOperand { Base = Register.BX },
+        };
+
+        cpu.Execute(instruction);
+
+        Assert.Equal(0x34, cpu.Mem.ReadByte(0x0200));
+        Assert.Equal(0x22, cpu.Mem.ReadByte(0x0201));
+        Assert.False(cpu.CF);
+        Assert.False(cpu.ZF);
+        Assert.False(cpu.SF);
+        Assert.False(cpu.OF);
+        Assert.False(cpu.PF);
+        Assert.False(cpu.AF);
+    }
+
+    [Fact]
+    public void Execute_AddAlDirectAddr_ByteFromDirectAddress()
+    {
+        var cpu = new Cpu { AL = 0x10 };
+        cpu.Mem.WriteByte(0x0300, 0x05);
+
+        var instruction = new DecodedInstruction
+        {
+            Operation = Operation.Add,
+            Direction = false,
+            Word = false,
+            Source = null,
+            Destination = Register.AL,
+            MemoryOperand = new MemoryOperand { Base = null, Index = null, Displacement = 0x0300 },
+        };
+
+        cpu.Execute(instruction);
+
+        Assert.Equal(0x15, cpu.AL);
+        Assert.False(cpu.CF);
+        Assert.False(cpu.ZF);
+        Assert.False(cpu.SF);
+        Assert.False(cpu.OF);
+        Assert.False(cpu.PF);
+        Assert.False(cpu.AF);
+    }
+
+    [Fact]
+    public void ResolveEffectiveAddress_WithSegment_AddsSegmentShifted()
+    {
+        var cpu = new Cpu { DS = 0x0200, BX = 0x0010 };
+
+        var operand = new MemoryOperand
+        {
+            Base = Register.BX,
+            Segment = Register.DS,
+        };
+
+        var address = cpu.ResolveEffectiveAddress(operand);
+
+        Assert.Equal((ushort)0x2010, address);
+    }
+
+    [Fact]
+    public void MemoryOperand_HasSegmentField()
+    {
+        var operand = new MemoryOperand
+        {
+            Base = Register.BX,
+            Segment = Register.DS,
+        };
+
+        Assert.Equal(Register.DS, operand.Segment);
+    }
+
+    [Fact]
     public void GetRegisterValue_InvalidRegister_ThrowsInvalidRegisterException()
     {
         var cpu = new Cpu();

@@ -483,6 +483,7 @@ $RECYCLE.BIN/
 
 # Test data files (download from https://github.com/SingleStepTests/8088)
 tests/data/*.json.gz
+tests/data/*.json
 /.netcoredbg_hist
 
 docs/*.pdf
