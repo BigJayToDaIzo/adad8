@@ -377,6 +377,34 @@ public class CpuTests
     }
 
     [Fact]
+    public void Execute_AddAxMemBx_WordFromMemory()
+    {
+        var cpu = new Cpu { AX = 0x1000, BX = 0x0200 };
+        cpu.Mem.WriteByte(0x0200, 0x34);
+        cpu.Mem.WriteByte(0x0201, 0x12);
+
+        var instruction = new DecodedInstruction
+        {
+            Operation = Operation.Add,
+            Direction = false,
+            Word = true,
+            Source = null,
+            Destination = Register.AX,
+            MemoryOperand = new MemoryOperand { Base = Register.BX },
+        };
+
+        cpu.Execute(instruction);
+
+        Assert.Equal(0x2234, cpu.AX);
+        Assert.False(cpu.CF);
+        Assert.False(cpu.ZF);
+        Assert.False(cpu.SF);
+        Assert.False(cpu.OF);
+        Assert.False(cpu.PF);
+        Assert.False(cpu.AF);
+    }
+
+    [Fact]
     public void GetRegisterValue_InvalidRegister_ThrowsInvalidRegisterException()
     {
         var cpu = new Cpu();

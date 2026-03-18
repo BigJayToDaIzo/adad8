@@ -106,4 +106,20 @@ public class DecoderTests
     Assert.Equal(Register.SI, instruction.MemoryOperand.Index);
     Assert.Equal((short)0x1000, instruction.MemoryOperand.Displacement);
   }
+
+  [Fact]
+  public void Decode_0x00_ModRM_Mod00_RM110_DirectAddress()
+  {
+    // 0x00 = ADD r/m8, r8 (d=0, w=0)
+    // ModR/M byte 0x06 = MOD=00, REG=000 (AL), R/M=110 (direct address)
+    // Displacement bytes 0x00, 0x20 = 0x2000 (little-endian)
+    var instruction = Decoder.Decode([0x00, 0x06, 0x00, 0x20]);
+
+    Assert.Equal(Operation.Add, instruction.Operation);
+    Assert.Equal(Register.AL, instruction.Source);
+    Assert.NotNull(instruction.MemoryOperand);
+    Assert.Null(instruction.MemoryOperand.Base);
+    Assert.Null(instruction.MemoryOperand.Index);
+    Assert.Equal((short)0x2000, instruction.MemoryOperand.Displacement);
+  }
 }

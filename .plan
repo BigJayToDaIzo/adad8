@@ -6,6 +6,50 @@ Notation: * accomplishment | ? open question | + resolved | ~ dropped
 
 ---
 
+# 2026-03-17 (cont. 14 — MOD=01, MOD=10, MOD=00 R/M=110, word memory read)
+
+Completed all displacement modes in ParseModRMByte and wired up word-width memory reads in DecodeSource.
+
+## What Was Built
+
+* Decoder.cs — ParseModRMByte signature widened from single byte to `byte[] instructions` so it can read displacement bytes from the instruction stream.
+* Decoder.cs — MOD=01 branch: 8-bit displacement via `(sbyte)instructions[2]`, implicit widening to `short` handles sign extension.
+* Decoder.cs — MOD=10 branch: 16-bit displacement via `(short)(instructions[2] | (instructions[3] << 8))`, same OR-shift little-endian reassembly as word immediates.
+* Decoder.cs — MOD=00 R/M=110 special case: direct address — null base, null index, 16-bit displacement from instruction stream. `_transRM[6]` (BP, null) remains correct for MOD=01/10.
+* Decoder.cs — flattened nesting: removed else block, all four mode returns are now early-exit ifs. Stale comments removed.
+* Cpu.cs — DecodeSource word-width memory read: resolve EA once into `addr`, read two bytes `(ushort)(Mem.ReadByte(addr) | Mem.ReadByte((ushort)(addr + 1)) << 8)`.
+* DecoderTests.cs — 3 new tests: Decode_0x00_ModRM_Mod01_BxSi_Displacement8, Decode_0x00_ModRM_Mod10_BxSi_Displacement16, Decode_0x00_ModRM_Mod00_RM110_DirectAddress.
+* CpuTests.cs — 1 new test: Execute_AddAxMemBx_WordFromMemory (0x1000 + [0x1234] = 0x2234).
+* CLAUDE.md — new "Sign Extension via Signed Cast" section, updated development state (31→33 green, MOD=01/10 done), removed stale decoder test gotcha.
+
+## Key Decisions
+
++ ParseModRMByte takes the whole instructions array — cleanest way to give it access to displacement bytes without a separate pass-back-and-read-later dance.
++ `(sbyte)byteValue` for sign extension — C# type system does two's complement reinterpretation and implicit widening to `short`. No manual bit flipping needed. Documented in CLAUDE.md for reuse in relative jumps and 0x83 group.
++ MOD=00 R/M=110 handled as explicit special case (`mode == 0b00 && rm == 0b110`) rather than modifying `_transRM[6]` — keeps the table correct for MOD=01/10 where R/M=110 really does mean BP.
++ Redundant `(short)` cast dropped from sign extension — Roslyn IDE0370, `(sbyte)` implicitly widens to `short`.
++ xUnit `Assert.NotNull` has `[NotNull]` — `!` null-forgiving operators after it are redundant (IDE0370). Stripped from decoder tests.
+
+## Status
+
+* 33 of 34 tests green. 1 integration test (Opcode00Tests) skipped.
+
+## Resolved
+
++ MOD=01 8-bit displacement — sign-extended via `(sbyte)` cast.
++ MOD=10 16-bit displacement — OR-shift little-endian reassembly.
++ MOD=00 R/M=110 special case — direct address, no base/index.
++ Word-width memory read in DecodeSource — two-byte read with OR-shift.
++ Where displacement reading belongs — ParseModRMByte, with full instructions array passed in.
+
+## Open
+
+? Memory as destination — write path (`ADD [BX], AL`) requires WriteByte after execute. Direction bit + MemoryOperand interaction.
+? ByteLength is currently `instructions.Length` — not computed by the decoder from opcode + format + mod.
+? Opcode00 integration test unskip — once full ADD pipeline handles all addressing modes.
+
+---
+
 # 2026-03-12 (cont. 13 — MOD!=11 memory addressing, first MemoryOperand green)
 
 Wired up the first memory addressing mode through the decoder. MOD=00 R/M=000 ([BX+SI]) now decodes into a MemoryOperand on DecodedInstruction.

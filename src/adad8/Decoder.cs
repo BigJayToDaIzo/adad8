@@ -106,6 +106,17 @@ namespace adad8
             Displacement = (short)(instructions[2] | (instructions[3] << 8)),
           }
         );
+      if (rm == 0b110)
+        return (
+          (Register)(reg + regEnumBank),
+          null,
+          new MemoryOperand
+          {
+            Base = null,
+            Index = null,
+            Displacement = (short)(instructions[2] | (instructions[3] << 8)),
+          }
+        );
       return (
         (Register)(reg + regEnumBank),
         null,
