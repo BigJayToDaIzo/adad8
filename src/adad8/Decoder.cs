@@ -34,13 +34,39 @@ namespace adad8
 
         public static DecodedInstruction Decode(byte[] instructions)
         {
-            var word = (instructions[0] & 1) == 1;
-            var direction = ((instructions[0] >> 1) & 1) == 1;
-            var operation = _transOperation[instructions[0]];
+            // is this an opcode or a preop?
+            var opCodeIdx = 0;
+            bool isOpCode = false;
+            MemoryOperand? memOp = null;
+            while (!isOpCode)
+            {
+                // we have to set MemoryOperand.Segment here
+                // we don't have a MemoryOperand yet.
+                if (instructions[opCodeIdx] == 0x26)
+                {
+                    memOp = new { Segment = Register.ES };
+                    opCodeIdx++;
+                }
+                else if (instructions[opCodeIdx] == 0x2E)
+                {
+                    opCodeIdx++;
+                }
+                else if (instructions[opCodeIdx] == 0x36)
+                {
+                    opCodeIdx++;
+                }
+                else if (instructions[opCodeIdx] == 0x3E)
+                {
+                    opCodeIdx++;
+                }
+                isOpCode = true;
+            }
+            var word = (instructions[opCodeIdx] & 1) == 1;
+            var direction = ((instructions[opCodeIdx] >> 1) & 1) == 1;
+            var operation = _transOperation[instructions[opCodeIdx]];
 
             Register? reg;
             Register? rm;
-            MemoryOperand? memOp = null;
             Register? source = null;
             Register? destination = null;
             ushort? immediateValue = null;

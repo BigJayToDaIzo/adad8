@@ -255,7 +255,9 @@ public class Cpu
         var mIndex = memOp.Index != null ? GetRegisterValue(memOp.Index) : 0;
         var mDisplacement = memOp.Displacement != null ? memOp.Displacement : 0;
         var mSegment = memOp.Segment != null ? GetRegisterValue(memOp.Segment) << 4 : 0;
-        return (int)(mBase + mIndex + mDisplacement + mSegment);
+        var offset = (mBase + mIndex + mDisplacement) & 0xFFFF;
+        var physical = (mSegment + offset) & 0xFFFFF;
+        return (int)physical;
     }
 
     public int DecodeSource(DecodedInstruction decodedInstruction)
@@ -290,7 +292,6 @@ public class Cpu
                 : Mem.ReadByte(addr);
             var result = destVal + srcVal;
             SetFlags(result, srcVal, destVal, decodedInstruction.Word);
-            // either 1 byte written !Word, or 2 bytes written Word
             if (decodedInstruction.Word)
             {
                 Mem.WriteByte(addr, (byte)result);
