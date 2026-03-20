@@ -181,6 +181,7 @@ The fix: stop scanning bits and start indexing by the full opcode byte. There ar
 | `_transOperation[256]` | `Operation[]` | What operation does this opcode perform? |
 | `_transFormat[256]` | `EncodingFormat[]` | What encoding format are the operands in? (ModRM, ImmediateToAccumulator, ImmediateToModRM, etc.) |
 | `_transRM[8]` | `(Register?, Register?)[]` | What base/index register pair does this R/M field encode? (for memory addressing modes) |
+| `_isPreOp[256]` | `bool[]` | Is this byte a prefix (true) or an opcode (false)? 7 entries true: `0x26`, `0x2E`, `0x36`, `0x3E`, `0xF0`, `0xF2`, `0xF3` |
 
 Additional tables will emerge as more opcodes reveal their encoding quirks. The pattern is: one table per decoding question, indexed by opcode byte, populated at static init.
 
@@ -235,22 +236,94 @@ The decoder determines the segment at decode time and stores it on `MemoryOperan
 
 `ResolveEffectiveAddress` must compute the offset first (base + index + displacement), wrap it to 16 bits, *then* add `segment << 4`, and wrap the final result to 20 bits. Getting the order wrong produces addresses that are off by 0x10000 — which reads/writes the wrong memory location entirely.
 
+### How a wrong address silently corrupts flags
+
+A bad EA doesn't crash — it reads a valid but *wrong* byte from memory. The failure chain:
+
+1. **Wrong offset wrapping** → physical address lands in wrong memory region
+2. **Wrong `destVal`** → `Mem.ReadByte(wrongAddr)` returns whatever byte lives there
+3. **Wrong arithmetic result** → `destVal + srcVal` computes a plausible but incorrect sum
+4. **Wrong flags** → `SetFlags` faithfully computes flags for the wrong result
+
+The result and flags are internally consistent — they're just not consistent with what the hardware would produce. This makes the bug invisible to any check that doesn't compare against known-good state.
+
+In integration testing, this typically surfaces as a **Flags mismatch** (not a RAM mismatch), because `Verify` checks registers and flags before RAM. For memory-destination instructions where no GPR changes, flags is the first computed value in the assert chain, so it's the first to fail. The symptom is a small delta in the Flags register (e.g. 4 = bit 2 = PF) with no obvious connection to addressing — you have to trace backwards from "wrong parity" through "wrong result" through "wrong read" to "wrong address."
+
+### Two traps when refactoring `ResolveEffectiveAddress`
+
+1. **Double shift.** If the segment is shifted `<< 4` when read from the register *and* shifted again when added to the offset, the segment contribution is `<< 8` — 16x too large. The symptom: addresses like `0x20010` instead of `0x2010`. Pick one site for the shift.
+
+2. **Wrong mask width.** `0xFFFFF` (five F's) = 20 bits. `0xFFFFFF` (six F's) = 24 bits. Easy to miscount. `Memory.ReadByte` masks at 20 bits as a safety net, but `ResolveEffectiveAddress` should be correct on its own.
+
+## 8088 Internals — Instruction Prefix Bytes
+
+The 8088 has single-byte prefixes that modify the following instruction. The decoder must consume prefix bytes before extracting W/D/operation from the actual opcode. Prefixes are not opcodes — they have no W bit, no D bit, no ModR/M byte. They modify state and then the real opcode follows.
+
+### Segment override prefixes
+
+These override the default segment register for the instruction's memory access:
+
+| Byte | Prefix | Effect |
+|---|---|---|
+| `0x26` | ES: | Memory access uses ES instead of default |
+| `0x2E` | CS: | Memory access uses CS instead of default |
+| `0x36` | SS: | Memory access uses SS instead of default |
+| `0x3E` | DS: | Memory access uses DS instead of default |
+
+On a register-to-register instruction (MOD=11), a segment override is a NOP — there's no memory access to redirect. But the prefix byte is still consumed, IP still advances by 1, and the test suite expects this.
+
+### What happens without prefix handling
+
+The decoder treats the prefix byte as the opcode. For `CS: ADD CL, BL` (bytes `[0x2E, 0x00, 0xD9]`):
+
+1. Decoder reads `0x2E` as opcode → extracts W=0, D=1 from its bits
+2. Reads `0x00` as ModR/M → MOD=00, REG=000, R/M=000 → memory operand [BX+SI]
+3. Produces `ADD AL, [BX+SI]` instead of `ADD CL, BL`
+4. Execute writes to AL, never touches CL
+5. CX remains at its initial value — test fails on CX assertion
+
+The symptom is a register holding its initial value when it should have been modified. The decoder silently produced a valid but wrong instruction — no crash, no exception, just wrong behavior.
+
+### Prefix handling strategy
+
+Prefixes must be stripped before the main decode loop. The decoder needs to:
+
+1. Check if `instructions[offset]` is a prefix byte
+2. If so, record its effect (e.g., segment override) and advance `offset`
+3. Repeat until a non-prefix byte is found — that's the real opcode
+4. Decode the opcode starting at `offset`, using the accumulated prefix state
+5. `ByteLength` must include all prefix bytes consumed
+
+The segment override, once captured, replaces the default segment that `ParseModRMByte` would assign. For memory operands, the prefix segment takes precedence over the BP→SS / else→DS default. For register operands, the override is ignored.
+
+### Other prefixes (future)
+
+Beyond segment overrides, the 8088 has:
+- `0xF0` — LOCK (bus lock for multi-processor, can ignore for now)
+- `0xF2` — REPNE/REPNZ (string operation repeat)
+- `0xF3` — REP/REPE/REPZ (string operation repeat)
+
+Multiple prefixes can stack. The decoder loop should handle any number of prefix bytes before the opcode.
+
 ## Current Development State
 
-### What works (40 unit tests green, integration test partially passing)
+### What works (42 unit tests green, integration test partially passing)
 - ADD register-to-register: byte and word, all 6 status flags, all edge cases
 - ADD immediate-to-accumulator: byte (AL) and word (AX)
 - ADD memory as source: byte and word (little-endian two-byte read)
 - ADD memory as destination: byte and word (little-endian two-byte write)
 - MOD=00 + R/M=110 direct address special case
 - IP advancement by instruction byte length
-- Effective address resolution (base + index + displacement + segment)
+- Effective address resolution with two-phase wrapping (offset at 16 bits, physical at 20 bits)
 - Segment register support: CS, DS, SS, ES added to Register enum
 - Decoder: segment assignment on MemoryOperand (BP→SS, else→DS)
 - Decoder: opcode lookup tables, ModR/M parsing for all MOD modes, ImmediateToAccumulator format
-- Opcode00 integration test running — passes first test case, fails on second due to offset wrapping
+- Decoder: prefix byte detection via `_isPreOp[256]` lookup table — loop advances `opCodeIdx` past prefix bytes to find real opcode
+- Decoder: `opCodeIdx` propagated through `Decode` and into `ParseModRMByte` — all instruction byte indexing is now relative to opcode position
+- Opcode00 integration test running — passes memory operation tests, fails on first prefixed instruction
 
 ### What's next
-1. Fix ResolveEffectiveAddress offset wrapping — offset must wrap at 16 bits before segment is added, final address wraps at 20 bits
+1. Segment override application — prefix loop captures override `Register?`, apply to `MemoryOperand.Segment` after `ParseModRMByte` creates it (override replaces BP→SS / else→DS default)
 2. Continue running Opcode00 integration test suite (10,000 tests) to find remaining edge cases
 3. Duplicate memory read pattern in DecodeSource and Execute — candidate for ReadWord helper on Memory class
+4. Operation enum default value — `Add` is `0`, so uninitialized `_transOperation` slots silently return `Add`. Consider adding a `None` sentinel as the first enum value.

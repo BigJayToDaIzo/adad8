@@ -6,6 +6,43 @@ Notation: * accomplishment | ? open question | + resolved | ~ dropped
 
 ---
 
+# 2026-03-18 (cont. 15 — EA wrapping fix, prefix discovery)
+
+Fixed ResolveEffectiveAddress offset wrapping. Discovered segment override prefix handling gap in Decoder.
+
+## What Was Built
+
+* Cpu.cs — ResolveEffectiveAddress now does two-phase wrapping: offset = (base + index + displacement) & 0xFFFF, then physical = (offset + segment<<4) & 0xFFFFF. Previously summed everything in one shot, causing addresses to be off when offset overflowed 16 bits.
+* Cpu.cs — reformatted to 2-space indentation.
+* CLAUDE.md — new "How a wrong address silently corrupts flags" section documenting the failure chain from bad EA through wrong memory read to wrong flags.
+* CLAUDE.md — new "Two traps when refactoring ResolveEffectiveAddress" section (double shift, wrong mask width).
+* CLAUDE.md — new "Instruction Prefix Bytes" section documenting the segment override prefix discovery, what happens without handling, and the strategy for implementing it.
+* CLAUDE.md — updated development state to reflect EA wrapping fix and prefix as next work item.
+* .memories/ — new repo-local memory directory (git-tracked, portable across machines). Replaces machine-local ~/.claude memory path. Contains MEMORY.md index, README with new-machine setup instructions, and memory files.
+
+## Key Decisions
+
++ Two-phase wrapping order matters — offset wraps at 16 bits BEFORE segment addition, physical wraps at 20 bits AFTER. Getting this backwards produces addresses off by 0x10000.
++ Memories go in repo, not in ~/.claude — user works on multiple machines. .memories/ travels with the project. The machine-local MEMORY.md becomes a pointer file.
+
+## Status
+
+* 40 of 41 tests green. 1 integration test (Opcode00Tests) failing on `add cl, bl` — actually `CS: ADD CL, BL` with segment override prefix byte 0x2E that the decoder doesn't handle.
+
+## Resolved
+
++ EA offset wrapping — two-phase wrap in ResolveEffectiveAddress.
++ Double segment shift — was shifting << 4 in both the variable assignment and the addition.
++ Wrong mask width — 0xFFFFFF (24-bit) corrected to 0xFFFFF (20-bit). Recurring bug, saved to memory.
+
+## Open
+
+? Decoder prefix handling — segment override prefixes (0x26, 0x2E, 0x36, 0x3E) must be stripped before opcode decode. Need offset tracking in Decode, prefix loop, and segment override applied to MemoryOperand.
+? ByteLength is still `instructions.Length` — not computed by decoder. Works as long as test.Bytes is exact instruction length (including prefixes), but fragile.
+? Duplicate memory read pattern in DecodeSource and Execute — ReadWord helper candidate.
+
+---
+
 # 2026-03-17 (cont. 14 — MOD=01, MOD=10, MOD=00 R/M=110, word memory read)
 
 Completed all displacement modes in ParseModRMByte and wired up word-width memory reads in DecodeSource.
