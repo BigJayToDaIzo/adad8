@@ -137,6 +137,46 @@ public class DecoderTests
   }
 
   [Fact]
+  public void Decode_SegmentPrefix_OverridesDefaultSegmentOnMemoryOperand()
+  {
+    // ES: ADD [BX+SI], AL — 0x26 prefix + 0x00 opcode + 0x00 ModR/M (MOD=00, R/M=000)
+    // [BX+SI] normally defaults to DS, but ES prefix should override to ES
+    var instruction = Decoder.Decode([0x26, 0x00, 0x00]);
+
+    Assert.Equal(Register.ES, instruction.MemoryOperand!.Segment);
+  }
+
+  [Fact]
+  public void Decode_CsSegmentPrefix_OverridesDefaultSegmentOnMemoryOperand()
+  {
+    // CS: ADD [BX+SI], AL — 0x2E prefix + 0x00 opcode + 0x00 ModR/M (MOD=00, R/M=000)
+    // [BX+SI] normally defaults to DS, but CS prefix should override to CS
+    var instruction = Decoder.Decode([0x2E, 0x00, 0x00]);
+
+    Assert.Equal(Register.CS, instruction.MemoryOperand!.Segment);
+  }
+
+  [Fact]
+  public void Decode_SsSegmentPrefix_OverridesDefaultSegmentOnMemoryOperand()
+  {
+    // SS: ADD [BX+SI], AL — 0x36 prefix + 0x00 opcode + 0x00 ModR/M (MOD=00, R/M=000)
+    // [BX+SI] normally defaults to DS, but SS prefix should override to SS
+    var instruction = Decoder.Decode([0x36, 0x00, 0x00]);
+
+    Assert.Equal(Register.SS, instruction.MemoryOperand!.Segment);
+  }
+
+  [Fact]
+  public void Decode_DsSegmentPrefix_OverridesDefaultSegmentOnMemoryOperand()
+  {
+    // DS: ADD [BP+SI], AL — 0x3E prefix + 0x00 opcode + 0x02 ModR/M (MOD=00, REG=000, R/M=010 [BP+SI])
+    // [BP+SI] normally defaults to SS, but DS prefix should override to DS
+    var instruction = Decoder.Decode([0x3E, 0x00, 0x02]);
+
+    Assert.Equal(Register.DS, instruction.MemoryOperand!.Segment);
+  }
+
+  [Fact]
   public void Decode_0x00_ModRM_Mod00_RM110_DirectAddress()
   {
     // 0x00 = ADD r/m8, r8 (d=0, w=0)

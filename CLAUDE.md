@@ -307,7 +307,7 @@ Multiple prefixes can stack. The decoder loop should handle any number of prefix
 
 ## Current Development State
 
-### What works (42 unit tests green, integration test partially passing)
+### What works (46 unit tests green, integration test partially passing)
 - ADD register-to-register: byte and word, all 6 status flags, all edge cases
 - ADD immediate-to-accumulator: byte (AL) and word (AX)
 - ADD memory as source: byte and word (little-endian two-byte read)
@@ -320,10 +320,17 @@ Multiple prefixes can stack. The decoder loop should handle any number of prefix
 - Decoder: opcode lookup tables, ModR/M parsing for all MOD modes, ImmediateToAccumulator format
 - Decoder: prefix byte detection via `_isPreOp[256]` lookup table — loop advances `opCodeIdx` past prefix bytes to find real opcode
 - Decoder: `opCodeIdx` propagated through `Decode` and into `ParseModRMByte` — all instruction byte indexing is now relative to opcode position
-- Opcode00 integration test running — passes memory operation tests, fails on first prefixed instruction
+- Decoder: segment override prefixes (0x26→ES, 0x2E→CS, 0x36→SS, 0x3E→DS) applied to MemoryOperand via `record with` after ParseModRMByte returns; null-guarded for MOD=11 (register-to-register, no memOp)
+- Opcode00 integration test running — passes prefixed instructions, fails on `add byte [ds:7D0Eh], cl`
+
+### Current integration test failure
+- Test: `add byte [ds:7D0Eh], cl` — non-prefixed, MOD=00 R/M=110 direct address
+- Symptom: Flags mismatch — expected 0xF096, actual 0xF006, delta = 0x0090 (AF + SF)
+- Root cause unknown — could be wrong EA (wrong-address → wrong-read → wrong-flags chain) or a real SetFlags bug. Debugger breakpoint is set; next step is stepping through ResolveEffectiveAddress to verify the physical address and read value.
 
 ### What's next
-1. Segment override application — prefix loop captures override `Register?`, apply to `MemoryOperand.Segment` after `ParseModRMByte` creates it (override replaces BP→SS / else→DS default)
-2. Continue running Opcode00 integration test suite (10,000 tests) to find remaining edge cases
-3. Duplicate memory read pattern in DecodeSource and Execute — candidate for ReadWord helper on Memory class
-4. Operation enum default value — `Add` is `0`, so uninitialized `_transOperation` slots silently return `Add`. Consider adding a `None` sentinel as the first enum value.
+1. Debug the `add byte [ds:7D0Eh], cl` failure — step through ResolveEffectiveAddress, verify address/read/arithmetic/flags chain
+2. Segment override if/else chain in Decode (lines 77-84) is a candidate for a lookup table refactor after green
+3. Continue running Opcode00 integration test suite (10,000 tests) to find remaining edge cases
+4. Duplicate memory read pattern in DecodeSource and Execute — candidate for ReadWord helper on Memory class
+5. Operation enum default value — `Add` is `0`, so uninitialized `_transOperation` slots silently return `Add`. Consider adding a `None` sentinel as the first enum value.
